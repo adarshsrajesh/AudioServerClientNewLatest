@@ -5,6 +5,7 @@ const peers = {};
 let localStream;
 let myUsername;
 let pendingCall = null;
+let pendingInvite = null;
 
 async function login() {
   myUsername = document.getElementById("usernameInput").value.trim();
@@ -172,4 +173,60 @@ socket.on("join-call", async ({ joiningUserId }) => {
     toUserId: joiningUserId,
     offer: pc.localDescription,
   });
+});
+
+socket.on("incoming-invite", ({ fromUserId }) => {
+  pendingInvite = { fromUserId };
+  document.getElementById("inviterName").textContent = fromUserId;
+  document.getElementById("incomingInviteNotification").style.display = "block";
+});
+
+async function acceptInvite() {
+  if (!pendingInvite) return;
+  
+  const { fromUserId } = pendingInvite;
+  
+  // Create a new peer connection for the inviter
+  const pc = createPeerConnection(fromUserId);
+  peers[fromUserId] = pc;
+
+  localStream.getTracks().forEach((track) =>
+    pc.addTrack(track, localStream)
+  );
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  socket.emit("call-user", {
+    toUserId: fromUserId,
+    offer: pc.localDescription,
+  });
+
+  socket.emit("accept-invite", {
+    fromUserId: fromUserId
+  });
+
+  // Hide the notification
+  document.getElementById("incomingInviteNotification").style.display = "none";
+  pendingInvite = null;
+}
+
+function rejectInvite() {
+  if (!pendingInvite) return;
+  
+  socket.emit("reject-invite", {
+    fromUserId: pendingInvite.fromUserId
+  });
+  
+  // Hide the notification
+  document.getElementById("incomingInviteNotification").style.display = "none";
+  pendingInvite = null;
+}
+
+socket.on("invite-accepted", ({ fromUserId }) => {
+  alert(`${fromUserId} has joined the call`);
+});
+
+socket.on("invite-rejected", ({ fromUserId }) => {
+  alert(`${fromUserId} has declined to join the call`);
 });
