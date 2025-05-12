@@ -1,4 +1,4 @@
-const socket = io("http://localhost:5000");
+const socket = io("https://audioserver.onrender.com/");
 const peers = {};
 let localStream;
 let myUsername;
