@@ -120,7 +120,7 @@ socket.on("ice-candidate", ({ fromUserId, candidate }) => {
 socket.on("join-call", async ({ joiningUserId }) => {
   if (joiningUserId === myUsername) return;
 
-  const confirmJoin = confirm(`${joiningUserId} invited you to a conference call. Join?`);
+  const confirmJoin = confirm(`${myUsername} invited you to a conference call. Join?`);
   if (!confirmJoin) return;
 
   const pc = createPeerConnection(joiningUserId);
