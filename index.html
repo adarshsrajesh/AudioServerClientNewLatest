@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audio Call App</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    #onlineUsers button { margin-left: 1em; }
+    audio { display: block; margin-top: 1em; }
+    .user { margin: 0.5em 0; }
+  </style>
+</head>
+<body>
+  <h2>Audio Call App</h2>
+
+  <div id="loginSection">
+    <input type="text" id="usernameInput" placeholder="Enter your username" />
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div id="callSection" style="display:none;">
+    <h3>Welcome, <span id="myUsername"></span></h3>
+    <h4>Online Users</h4>
+    <div id="onlineUsers"></div>
+
+    <h4>Audio Streams</h4>
+    <audio id="localAudio" autoplay muted></audio>
+    <div id="remoteAudios"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
