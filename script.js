@@ -1,9 +1,10 @@
 // const socket = io("http://192.168.137.69:5000");
-const socket = io("https://audioserver.onrender.com/");
+const socket = io("https://audioserver.onrender.com/"); 
 
 const peers = {};
 let localStream;
 let myUsername;
+let pendingCall = null;
 
 async function login() {
   myUsername = document.getElementById("usernameInput").value.trim();
@@ -91,6 +92,18 @@ socket.on("online-users", (users) => {
 });
 
 socket.on("incoming-call", async ({ fromUserId, offer }) => {
+  // Store the pending call information
+  pendingCall = { fromUserId, offer };
+  
+  // Show the incoming call notification
+  document.getElementById("callerName").textContent = fromUserId;
+  document.getElementById("incomingCallNotification").style.display = "block";
+});
+
+async function acceptCall() {
+  if (!pendingCall) return;
+  
+  const { fromUserId, offer } = pendingCall;
   const pc = createPeerConnection(fromUserId);
   peers[fromUserId] = pc;
 
@@ -107,10 +120,35 @@ socket.on("incoming-call", async ({ fromUserId, offer }) => {
     toUserId: fromUserId,
     answer: pc.localDescription,
   });
-});
+
+  // Hide the notification
+  document.getElementById("incomingCallNotification").style.display = "none";
+  pendingCall = null;
+}
+
+function rejectCall() {
+  if (!pendingCall) return;
+  
+  socket.emit("reject-call", {
+    toUserId: pendingCall.fromUserId
+  });
+  
+  // Hide the notification
+  document.getElementById("incomingCallNotification").style.display = "none";
+  pendingCall = null;
+}
 
 socket.on("call-answered", ({ fromUserId, answer }) => {
   peers[fromUserId]?.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on("call-rejected", ({ fromUserId }) => {
+  alert(`Call was rejected by ${fromUserId}`);
+  // Clean up the peer connection if it exists
+  if (peers[fromUserId]) {
+    peers[fromUserId].close();
+    delete peers[fromUserId];
+  }
 });
 
 socket.on("ice-candidate", ({ fromUserId, candidate }) => {
@@ -119,9 +157,6 @@ socket.on("ice-candidate", ({ fromUserId, candidate }) => {
 
 socket.on("join-call", async ({ joiningUserId }) => {
   if (joiningUserId === myUsername) return;
-
-  const confirmJoin = confirm(`${myUsername} invited you to a conference call. Join?`);
-  if (!confirmJoin) return;
 
   const pc = createPeerConnection(joiningUserId);
   peers[joiningUserId] = pc;
@@ -138,4 +173,3 @@ socket.on("join-call", async ({ joiningUserId }) => {
     offer: pc.localDescription,
   });
 });
-
