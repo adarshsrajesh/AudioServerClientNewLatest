@@ -167,6 +167,12 @@ function updateActiveStreams() {
 }
 
 async function startCall(toUser) {
+  // Check if user is already in the call
+  if (activeCallParticipants.has(toUser)) {
+    console.warn(`Cannot call ${toUser}: Already in call with this user`);
+    return;
+  }
+
   const pc = createPeerConnection(toUser);
   peers[toUser] = pc;
   activeCallParticipants.add(toUser);
@@ -185,6 +191,12 @@ async function startCall(toUser) {
 }
 
 function inviteUser(toUser) {
+  // Check if user is already in the call
+  if (activeCallParticipants.has(toUser)) {
+    console.warn(`Cannot invite ${toUser}: Already in call with this user`);
+    return;
+  }
+
   if (activeCallParticipants.size === 0) {
     // If no active call, start a new one
     startCall(toUser);
@@ -214,6 +226,16 @@ socket.on("online-users", (users) => {
     const username = document.createElement("span");
     username.textContent = u;
 
+    // Add call status indicator
+    if (activeCallParticipants.has(u)) {
+      const status = document.createElement("span");
+      status.className = "call-status";
+      status.textContent = "In Call";
+      status.style.color = "var(--success-color)";
+      status.style.marginLeft = "0.5rem";
+      username.appendChild(status);
+    }
+
     userInfo.appendChild(avatar);
     userInfo.appendChild(username);
 
@@ -222,10 +244,12 @@ socket.on("online-users", (users) => {
 
     const callBtn = document.createElement("button");
     callBtn.textContent = "Call";
+    callBtn.disabled = activeCallParticipants.has(u);
     callBtn.onclick = () => startCall(u);
 
     const inviteBtn = document.createElement("button");
     inviteBtn.textContent = "Invite";
+    inviteBtn.disabled = activeCallParticipants.has(u);
     inviteBtn.onclick = () => inviteUser(u);
 
     userActions.appendChild(callBtn);
