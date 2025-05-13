@@ -120,6 +120,7 @@ function removeParticipant(peerId) {
     audioElement.remove();
   }
   updateActiveStreams();
+  updateCallState();
 }
 
 function updateActiveStreams() {
@@ -214,6 +215,7 @@ async function acceptCall() {
   // Hide the notification
   document.getElementById("incomingCallNotification").style.display = "none";
   pendingCall = null;
+  updateCallState();
 }
 
 function rejectCall() {
@@ -228,17 +230,20 @@ function rejectCall() {
   pendingCall = null;
 }
 
-socket.on("call-answered", ({ fromUserId, answer }) => {
-  peers[fromUserId]?.setRemoteDescription(new RTCSessionDescription(answer));
+socket.on("call-answered", async ({ fromUserId, answer }) => {
+  console.log(`Call answered by: ${fromUserId}`);
+  if (peers[fromUserId]) {
+    await peers[fromUserId].setRemoteDescription(new RTCSessionDescription(answer));
+    activeCallParticipants.add(fromUserId);
+    updateActiveStreams();
+    updateCallState();
+  }
 });
 
 socket.on("call-rejected", ({ fromUserId }) => {
+  console.log(`Call rejected by: ${fromUserId}`);
   alert(`Call was rejected by ${fromUserId}`);
-  // Clean up the peer connection if it exists
-  if (peers[fromUserId]) {
-    peers[fromUserId].close();
-    delete peers[fromUserId];
-  }
+  removeParticipant(fromUserId);
 });
 
 socket.on("ice-candidate", ({ fromUserId, candidate }) => {
@@ -265,7 +270,7 @@ socket.on("join-call", async ({ joiningUserId }) => {
   });
 });
 
-socket.on("incoming-invite", ({ fromUserId }) => {
+socket.on("incoming-invite", async ({ fromUserId }) => {
   pendingInvite = { fromUserId };
   document.getElementById("inviterName").textContent = fromUserId;
   document.getElementById("incomingInviteNotification").style.display = "block";
@@ -276,50 +281,67 @@ async function acceptInvite() {
   
   const { fromUserId } = pendingInvite;
   
-  // Create peer connections with all existing participants
-  for (const participant of activeCallParticipants) {
-    if (participant !== myUsername) {
-      const pc = createPeerConnection(participant);
-      peers[participant] = pc;
+  try {
+    // Create peer connections with all existing participants
+    for (const participant of activeCallParticipants) {
+      if (participant !== myUsername) {
+        console.log(`Creating connection with existing participant: ${participant}`);
+        const pc = createPeerConnection(participant);
+        peers[participant] = pc;
 
-      localStream.getTracks().forEach((track) =>
-        pc.addTrack(track, localStream)
-      );
+        localStream.getTracks().forEach((track) =>
+          pc.addTrack(track, localStream)
+        );
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-      socket.emit("call-user", {
-        toUserId: participant,
-        offer: pc.localDescription,
-      });
+        socket.emit("call-user", {
+          toUserId: participant,
+          offer: pc.localDescription,
+        });
+      }
     }
+
+    // Create connection with the inviter
+    console.log(`Creating connection with inviter: ${fromUserId}`);
+    const pc = createPeerConnection(fromUserId);
+    peers[fromUserId] = pc;
+    activeCallParticipants.add(fromUserId);
+
+    localStream.getTracks().forEach((track) =>
+      pc.addTrack(track, localStream)
+    );
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socket.emit("call-user", {
+      toUserId: fromUserId,
+      offer: pc.localDescription,
+    });
+
+    socket.emit("accept-invite", {
+      fromUserId: fromUserId
+    });
+
+    // Hide the notification
+    document.getElementById("incomingInviteNotification").style.display = "none";
+    pendingInvite = null;
+
+    // Notify all participants about the new user
+    for (const participant of activeCallParticipants) {
+      if (participant !== myUsername) {
+        socket.emit("new-participant-joined", {
+          toUserId: participant,
+          newParticipant: myUsername
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error accepting invite:", error);
+    alert("Failed to join the call. Please try again.");
   }
-
-  // Create connection with the inviter
-  const pc = createPeerConnection(fromUserId);
-  peers[fromUserId] = pc;
-  activeCallParticipants.add(fromUserId);
-
-  localStream.getTracks().forEach((track) =>
-    pc.addTrack(track, localStream)
-  );
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  socket.emit("call-user", {
-    toUserId: fromUserId,
-    offer: pc.localDescription,
-  });
-
-  socket.emit("accept-invite", {
-    fromUserId: fromUserId
-  });
-
-  // Hide the notification
-  document.getElementById("incomingInviteNotification").style.display = "none";
-  pendingInvite = null;
 }
 
 function rejectInvite() {
@@ -340,4 +362,75 @@ socket.on("invite-accepted", ({ fromUserId }) => {
 
 socket.on("invite-rejected", ({ fromUserId }) => {
   alert(`${fromUserId} has declined to join the call`);
+});
+
+// Add handler for new participant notification
+socket.on("new-participant-joined", async ({ newParticipant }) => {
+  console.log(`New participant joined: ${newParticipant}`);
+  if (!activeCallParticipants.has(newParticipant)) {
+    try {
+      const pc = createPeerConnection(newParticipant);
+      peers[newParticipant] = pc;
+      activeCallParticipants.add(newParticipant);
+
+      localStream.getTracks().forEach((track) =>
+        pc.addTrack(track, localStream)
+      );
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socket.emit("call-user", {
+        toUserId: newParticipant,
+        offer: pc.localDescription,
+      });
+    } catch (error) {
+      console.error("Error connecting to new participant:", error);
+    }
+  }
+});
+
+function updateCallState() {
+  const callSection = document.getElementById("callSection");
+  if (activeCallParticipants.size > 0) {
+    callSection.classList.add("call-active");
+  } else {
+    callSection.classList.remove("call-active");
+  }
+}
+
+function leaveCall() {
+  // Notify all participants that we're leaving
+  for (const participant of activeCallParticipants) {
+    if (participant !== myUsername) {
+      socket.emit("participant-left", {
+        toUserId: participant,
+        leavingUserId: myUsername
+      });
+    }
+  }
+
+  // Close all peer connections
+  for (const [peerId, pc] of Object.entries(peers)) {
+    pc.close();
+    delete peers[peerId];
+  }
+
+  // Clear all remote audio elements
+  const remoteAudios = document.getElementById("remoteAudios");
+  remoteAudios.innerHTML = "";
+
+  // Clear active participants
+  activeCallParticipants.clear();
+
+  // Update UI
+  updateCallState();
+  updateActiveStreams();
+}
+
+// Add handler for participant leaving
+socket.on("participant-left", ({ leavingUserId }) => {
+  console.log(`Participant left: ${leavingUserId}`);
+  removeParticipant(leavingUserId);
+  updateCallState();
 });

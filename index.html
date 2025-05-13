@@ -53,6 +53,22 @@
     button:hover {
       opacity: 0.9;
     }
+    #leaveCallBtn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #f44336;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      display: none;
+    }
+    #leaveCallBtn:hover {
+      background: #d32f2f;
+    }
+    .call-active #leaveCallBtn {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -87,6 +103,8 @@
       <p>Remote Audio:</p>
       <div id="remoteAudios"></div>
     </div>
+
+    <button id="leaveCallBtn" onclick="leaveCall()">Leave Call</button>
 
     <div id="debugInfo">
       <p>Connection Status: <span id="connectionStatus" class="status-disconnected">Disconnected</span></p>
