@@ -1,11 +1,41 @@
 // const socket = io("http://192.168.137.69:5000");
-const socket = io("https://audio-chat-rho.vercel.app");
+const socket = io("https://audioserver.onrender.com");
 
 const peers = {};
 let localStream;
 let myUsername;
 let pendingCall = null;
 let pendingInvite = null;
+
+// ICE Server configuration for better connectivity
+const iceServers = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ]
+};
+
+// Connection status handling
+socket.on('connect', () => {
+  console.log('Connected to server');
+  document.getElementById('connectionStatus').textContent = 'Connected';
+  document.getElementById('connectionStatus').style.color = 'green';
+});
+
+socket.on('disconnect', () => {
+  console.log('Disconnected from server');
+  document.getElementById('connectionStatus').textContent = 'Disconnected';
+  document.getElementById('connectionStatus').style.color = 'red';
+});
+
+socket.on('connect_error', (error) => {
+  console.error('Connection error:', error);
+  document.getElementById('connectionStatus').textContent = 'Connection Error';
+  document.getElementById('connectionStatus').style.color = 'red';
+});
 
 async function login() {
   myUsername = document.getElementById("usernameInput").value.trim();
@@ -41,17 +71,21 @@ async function setupLocalStream() {
 }
 
 function createPeerConnection(peerId) {
-  const pc = new RTCPeerConnection();
+  const pc = new RTCPeerConnection(iceServers);
 
   pc.ontrack = (event) => {
+    console.log('Received remote track');
     const remoteAudio = document.createElement("audio");
     remoteAudio.autoplay = true;
+    remoteAudio.playsinline = true;
     remoteAudio.srcObject = event.streams[0];
     document.getElementById("remoteAudios").appendChild(remoteAudio);
+    updateActiveStreams();
   };
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
+      console.log('Sending ICE candidate');
       socket.emit("ice-candidate", {
         toUserId: peerId,
         candidate: event.candidate,
@@ -59,7 +93,20 @@ function createPeerConnection(peerId) {
     }
   };
 
+  pc.oniceconnectionstatechange = () => {
+    console.log('ICE connection state:', pc.iceConnectionState);
+  };
+
+  pc.onconnectionstatechange = () => {
+    console.log('Connection state:', pc.connectionState);
+  };
+
   return pc;
+}
+
+function updateActiveStreams() {
+  const streamCount = document.getElementById("remoteAudios").children.length;
+  document.getElementById("activeStreams").textContent = streamCount;
 }
 
 async function startCall(toUser) {

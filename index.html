@@ -15,7 +15,43 @@
       background: #f0f0f0; 
       padding: 10px; 
       border-radius: 5px; 
-      font-size: 12px; 
+      font-size: 12px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #connectionStatus {
+      font-weight: bold;
+    }
+    .status-connected {
+      color: #4CAF50;
+    }
+    .status-disconnected {
+      color: #f44336;
+    }
+    .status-error {
+      color: #ff9800;
+    }
+    #onlineUsers {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .user {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .user:last-child {
+      border-bottom: none;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      opacity: 0.9;
     }
   </style>
 </head>
@@ -53,8 +89,9 @@
     </div>
 
     <div id="debugInfo">
-      <p>Connection Status: <span id="connectionStatus">Disconnected</span></p>
+      <p>Connection Status: <span id="connectionStatus" class="status-disconnected">Disconnected</span></p>
       <p>Active Streams: <span id="activeStreams">0</span></p>
+      <p>Server: <span id="serverStatus">Checking...</span></p>
     </div>
   </div>
 
