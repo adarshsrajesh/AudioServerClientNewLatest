@@ -252,6 +252,51 @@
         max-width: none;
       }
     }
+
+    .dial-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      max-width: 300px;
+      margin: 1rem auto;
+    }
+
+    .dial-btn {
+      aspect-ratio: 1;
+      font-size: 1.5rem;
+      font-weight: 600;
+      background: var(--card-bg);
+      border: 2px solid var(--border-color);
+      color: var(--text-primary);
+      transition: all 0.2s;
+    }
+
+    .dial-btn:hover {
+      background: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+    }
+
+    .dial-btn:active {
+      transform: scale(0.95);
+    }
+
+    .dtmf-display {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 1rem;
+      min-height: 2rem;
+      padding: 0.5rem;
+      background: var(--bg-color);
+      border-radius: 0.5rem;
+    }
+
+    #dialPad {
+      max-width: 400px;
+      margin: 1rem auto;
+    }
   </style>
 </head>
 <body>
@@ -301,6 +346,25 @@
           <p>Remote Audio:</p>
           <div id="remoteAudios"></div>
         </div>
+      </div>
+
+      <div id="dialPad" class="card" style="display: none;">
+        <h4>Dial Pad</h4>
+        <div class="dial-grid">
+          <button class="dial-btn" onclick="sendDTMF('1')">1</button>
+          <button class="dial-btn" onclick="sendDTMF('2')">2</button>
+          <button class="dial-btn" onclick="sendDTMF('3')">3</button>
+          <button class="dial-btn" onclick="sendDTMF('4')">4</button>
+          <button class="dial-btn" onclick="sendDTMF('5')">5</button>
+          <button class="dial-btn" onclick="sendDTMF('6')">6</button>
+          <button class="dial-btn" onclick="sendDTMF('7')">7</button>
+          <button class="dial-btn" onclick="sendDTMF('8')">8</button>
+          <button class="dial-btn" onclick="sendDTMF('9')">9</button>
+          <button class="dial-btn" onclick="sendDTMF('*')">*</button>
+          <button class="dial-btn" onclick="sendDTMF('0')">0</button>
+          <button class="dial-btn" onclick="sendDTMF('#')">#</button>
+        </div>
+        <div id="dtmfDisplay" class="dtmf-display"></div>
       </div>
 
       <button id="leaveCallBtn" class="danger" onclick="leaveCall()">Leave Call</button>

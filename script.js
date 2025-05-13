@@ -59,7 +59,15 @@ async function login() {
 async function setupLocalStream() {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 8000,
+        sampleSize: 16,
+        codec: 'PCM'
+      },
       video: false 
     });
     const localAudio = document.getElementById("localAudio");
@@ -72,7 +80,17 @@ async function setupLocalStream() {
 }
 
 function createPeerConnection(peerId) {
-  const pc = new RTCPeerConnection(iceServers);
+  const pc = new RTCPeerConnection({
+    ...iceServers,
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all',
+    codecPreferences: [
+      { mimeType: 'audio/PCM', clockRate: 8000, channels: 1 },
+      { mimeType: 'audio/G711', clockRate: 8000, channels: 1 }
+    ]
+  });
 
   pc.ontrack = (event) => {
     console.log('Received remote track from:', peerId);
@@ -103,6 +121,20 @@ function createPeerConnection(peerId) {
     console.log(`Connection state with ${peerId}:`, pc.connectionState);
     if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
       removeParticipant(peerId);
+    }
+  };
+
+  // Add SDP modification to ensure G.711 codec
+  pc.onnegotiationneeded = async () => {
+    try {
+      const offer = await pc.createOffer();
+      const modifiedOffer = {
+        ...offer,
+        sdp: offer.sdp.replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:0 PCM/8000\r\n')
+      };
+      await pc.setLocalDescription(modifiedOffer);
+    } catch (error) {
+      console.error('Error during negotiation:', error);
     }
   };
 
@@ -410,12 +442,61 @@ socket.on("new-participant-joined", async ({ newParticipant }) => {
 
 function updateCallState() {
   const callSection = document.getElementById("callSection");
+  const dialPad = document.getElementById("dialPad");
   if (activeCallParticipants.size > 0) {
     callSection.classList.add("call-active");
+    dialPad.style.display = "block";
   } else {
     callSection.classList.remove("call-active");
+    dialPad.style.display = "none";
   }
 }
+
+// DTMF functionality
+let dtmfSender = null;
+let dtmfDisplay = "";
+
+function sendDTMF(digit) {
+  if (!dtmfSender) {
+    // Get the first active peer connection
+    const activePeer = Object.values(peers)[0];
+    if (!activePeer) return;
+
+    // Get the audio sender
+    const audioSender = activePeer.getSenders().find(sender => 
+      sender.track && sender.track.kind === 'audio'
+    );
+    if (!audioSender) return;
+
+    // Create DTMF sender
+    dtmfSender = audioSender.dtmf;
+    if (!dtmfSender) return;
+  }
+
+  // Send the DTMF tone
+  dtmfSender.insertDTMF(digit, 100, 50);
+  
+  // Update display
+  dtmfDisplay += digit;
+  document.getElementById("dtmfDisplay").textContent = dtmfDisplay;
+
+  // Notify all participants about the DTMF tone
+  for (const participant of activeCallParticipants) {
+    if (participant !== myUsername) {
+      socket.emit("dtmf-tone", {
+        toUserId: participant,
+        digit: digit
+      });
+    }
+  }
+}
+
+// Add DTMF tone handler
+socket.on("dtmf-tone", ({ digit }) => {
+  // Update display for received DTMF tone
+  dtmfDisplay += digit;
+  document.getElementById("dtmfDisplay").textContent = dtmfDisplay;
+});
 
 function leaveCall() {
   // Notify all participants that we're leaving
@@ -444,6 +525,10 @@ function leaveCall() {
   // Update UI
   updateCallState();
   updateActiveStreams();
+
+  dtmfDisplay = "";
+  document.getElementById("dtmfDisplay").textContent = "";
+  dtmfSender = null;
 }
 
 // Add handler for participant leaving
