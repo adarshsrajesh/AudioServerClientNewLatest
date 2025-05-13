@@ -446,24 +446,6 @@ socket.on("new-participant-joined", async ({ newParticipant }) => {
   }
 });
 
-function updateCallState() {
-  const callSection = document.getElementById("callSection");
-  const dialPad = document.getElementById("dialPad");
-  const isActive = activeCallParticipants.size > 0;
-  
-  if (isActive) {
-    callSection.classList.add("call-active");
-    dialPad.style.display = "block";
-  } else {
-    callSection.classList.remove("call-active");
-    dialPad.style.display = "none";
-    // Clear DTMF state when call ends
-    dtmfDisplay = "";
-    document.getElementById("dtmfDisplay").textContent = "";
-    dtmfSenders.clear();
-  }
-}
-
 // DTMF functionality
 let dtmfSenders = new Map();
 let dtmfDisplay = "";
@@ -504,28 +486,67 @@ async function sendDTMF(digit) {
     return;
   }
 
-  // Update display
-  dtmfDisplay += digit;
-  document.getElementById("dtmfDisplay").textContent = dtmfDisplay;
+  // Update local display
+  updateDTMFDisplay(digit);
 
   // Notify all participants about the DTMF tone
   for (const participant of activeCallParticipants) {
     if (participant !== myUsername) {
       socket.emit("dtmf-tone", {
         toUserId: participant,
-        digit: digit
+        digit: digit,
+        sender: myUsername
       });
     }
   }
 }
 
 // Add DTMF tone handler
-socket.on("dtmf-tone", ({ digit }) => {
-  console.log('Received DTMF:', digit);
+socket.on("dtmf-tone", ({ digit, sender }) => {
+  console.log('Received DTMF:', digit, 'from:', sender);
   // Update display for received DTMF tone
-  dtmfDisplay += digit;
-  document.getElementById("dtmfDisplay").textContent = dtmfDisplay;
+  updateDTMFDisplay(digit, sender);
 });
+
+function updateDTMFDisplay(digit, sender = null) {
+  const display = document.getElementById("dtmfDisplay");
+  if (!display) return;
+
+  // Add the digit to the display
+  dtmfDisplay += digit;
+  
+  // Format the display with sender information if available
+  if (sender) {
+    display.textContent = `${sender}: ${dtmfDisplay}`;
+  } else {
+    display.textContent = dtmfDisplay;
+  }
+}
+
+function cleanupDTMF() {
+  dtmfSenders.clear();
+  dtmfDisplay = "";
+  const display = document.getElementById("dtmfDisplay");
+  if (display) {
+    display.textContent = "";
+  }
+}
+
+function updateCallState() {
+  const callSection = document.getElementById("callSection");
+  const dialPad = document.getElementById("dialPad");
+  const isActive = activeCallParticipants.size > 0;
+  
+  if (isActive) {
+    callSection.classList.add("call-active");
+    dialPad.style.display = "block";
+  } else {
+    callSection.classList.remove("call-active");
+    dialPad.style.display = "none";
+    // Clear DTMF state when call ends
+    cleanupDTMF();
+  }
+}
 
 function leaveCall() {
   if (!activeCallParticipants.size) return;
