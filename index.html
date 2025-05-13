@@ -8,6 +8,15 @@
     #onlineUsers button { margin-left: 1em; }
     audio { display: block; margin-top: 1em; }
     .user { margin: 0.5em 0; }
+    #debugInfo { 
+      position: fixed; 
+      bottom: 10px; 
+      left: 10px; 
+      background: #f0f0f0; 
+      padding: 10px; 
+      border-radius: 5px; 
+      font-size: 12px; 
+    }
   </style>
 </head>
 <body>
@@ -36,11 +45,20 @@
     </div>
 
     <h4>Audio Streams</h4>
-    <audio id="localAudio" autoplay muted></audio>
-    <div id="remoteAudios"></div>
+    <div id="audioContainer">
+      <p>Your Audio (muted to prevent echo):</p>
+      <audio id="localAudio" autoplay playsinline></audio>
+      <p>Remote Audio:</p>
+      <div id="remoteAudios"></div>
+    </div>
+
+    <div id="debugInfo">
+      <p>Connection Status: <span id="connectionStatus">Disconnected</span></p>
+      <p>Active Streams: <span id="activeStreams">0</span></p>
+    </div>
   </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

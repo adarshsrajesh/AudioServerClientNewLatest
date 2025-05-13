@@ -1,5 +1,5 @@
 // const socket = io("http://192.168.137.69:5000");
-const socket = io("https://audioserver.onrender.com/"); 
+const socket = io("https://audio-chat-rho.vercel.app");
 
 const peers = {};
 let localStream;
@@ -11,17 +11,33 @@ async function login() {
   myUsername = document.getElementById("usernameInput").value.trim();
   if (!myUsername) return alert("Enter username");
 
-  document.getElementById("loginSection").style.display = "none";
-  document.getElementById("callSection").style.display = "block";
-  document.getElementById("myUsername").textContent = myUsername;
+  try {
+    await setupLocalStream();
+    
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("callSection").style.display = "block";
+    document.getElementById("myUsername").textContent = myUsername;
 
-  socket.emit("login", myUsername);
-  await setupLocalStream();
+    socket.emit("login", myUsername);
+  } catch (error) {
+    console.error("Failed to setup media stream:", error);
+    alert("Failed to access microphone. Please ensure you have granted microphone permissions.");
+  }
 }
 
 async function setupLocalStream() {
-  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  document.getElementById("localAudio").srcObject = localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: true,
+      video: false 
+    });
+    const localAudio = document.getElementById("localAudio");
+    localAudio.srcObject = localStream;
+    localAudio.muted = true; // Keep muted to prevent echo
+  } catch (error) {
+    console.error("Error accessing media devices:", error);
+    throw error;
+  }
 }
 
 function createPeerConnection(peerId) {
