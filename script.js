@@ -6,6 +6,7 @@ let localStream;
 let myUsername;
 let pendingCall = null;
 let pendingInvite = null;
+let activeCallParticipants = new Set(); // Track active call participants
 
 // ICE Server configuration for better connectivity
 const iceServers = {
@@ -74,18 +75,19 @@ function createPeerConnection(peerId) {
   const pc = new RTCPeerConnection(iceServers);
 
   pc.ontrack = (event) => {
-    console.log('Received remote track');
+    console.log('Received remote track from:', peerId);
     const remoteAudio = document.createElement("audio");
     remoteAudio.autoplay = true;
     remoteAudio.playsinline = true;
     remoteAudio.srcObject = event.streams[0];
+    remoteAudio.id = `audio-${peerId}`; // Add unique ID for each remote audio
     document.getElementById("remoteAudios").appendChild(remoteAudio);
     updateActiveStreams();
   };
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      console.log('Sending ICE candidate');
+      console.log('Sending ICE candidate to:', peerId);
       socket.emit("ice-candidate", {
         toUserId: peerId,
         candidate: event.candidate,
@@ -94,14 +96,30 @@ function createPeerConnection(peerId) {
   };
 
   pc.oniceconnectionstatechange = () => {
-    console.log('ICE connection state:', pc.iceConnectionState);
+    console.log(`ICE connection state with ${peerId}:`, pc.iceConnectionState);
   };
 
   pc.onconnectionstatechange = () => {
-    console.log('Connection state:', pc.connectionState);
+    console.log(`Connection state with ${peerId}:`, pc.connectionState);
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      removeParticipant(peerId);
+    }
   };
 
   return pc;
+}
+
+function removeParticipant(peerId) {
+  if (peers[peerId]) {
+    peers[peerId].close();
+    delete peers[peerId];
+  }
+  activeCallParticipants.delete(peerId);
+  const audioElement = document.getElementById(`audio-${peerId}`);
+  if (audioElement) {
+    audioElement.remove();
+  }
+  updateActiveStreams();
 }
 
 function updateActiveStreams() {
@@ -112,6 +130,7 @@ function updateActiveStreams() {
 async function startCall(toUser) {
   const pc = createPeerConnection(toUser);
   peers[toUser] = pc;
+  activeCallParticipants.add(toUser);
 
   localStream.getTracks().forEach((track) =>
     pc.addTrack(track, localStream)
@@ -127,7 +146,13 @@ async function startCall(toUser) {
 }
 
 function inviteUser(toUser) {
-  socket.emit("join-call", { joiningUserId: toUser });
+  if (activeCallParticipants.size === 0) {
+    // If no active call, start a new one
+    startCall(toUser);
+  } else {
+    // If there's an active call, invite to join
+    socket.emit("join-call", { joiningUserId: toUser });
+  }
 }
 
 socket.on("online-users", (users) => {
@@ -170,6 +195,7 @@ async function acceptCall() {
   const { fromUserId, offer } = pendingCall;
   const pc = createPeerConnection(fromUserId);
   peers[fromUserId] = pc;
+  activeCallParticipants.add(fromUserId);
 
   await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
@@ -224,6 +250,7 @@ socket.on("join-call", async ({ joiningUserId }) => {
 
   const pc = createPeerConnection(joiningUserId);
   peers[joiningUserId] = pc;
+  activeCallParticipants.add(joiningUserId);
 
   localStream.getTracks().forEach((track) =>
     pc.addTrack(track, localStream)
@@ -249,9 +276,30 @@ async function acceptInvite() {
   
   const { fromUserId } = pendingInvite;
   
-  // Create a new peer connection for the inviter
+  // Create peer connections with all existing participants
+  for (const participant of activeCallParticipants) {
+    if (participant !== myUsername) {
+      const pc = createPeerConnection(participant);
+      peers[participant] = pc;
+
+      localStream.getTracks().forEach((track) =>
+        pc.addTrack(track, localStream)
+      );
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socket.emit("call-user", {
+        toUserId: participant,
+        offer: pc.localDescription,
+      });
+    }
+  }
+
+  // Create connection with the inviter
   const pc = createPeerConnection(fromUserId);
   peers[fromUserId] = pc;
+  activeCallParticipants.add(fromUserId);
 
   localStream.getTracks().forEach((track) =>
     pc.addTrack(track, localStream)
