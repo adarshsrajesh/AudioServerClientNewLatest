@@ -131,6 +131,9 @@ function createPeerConnection(peerId) {
 
   pc.oniceconnectionstatechange = () => {
     console.log(`ICE connection state with ${peerId}:`, pc.iceConnectionState);
+    if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+      removeParticipant(peerId);
+    }
   };
 
   pc.onconnectionstatechange = () => {
@@ -148,7 +151,7 @@ function removeParticipant(peerId) {
     peers[peerId].close();
     delete peers[peerId];
   }
-  dtmfSenders.delete(peerId); // Clean up DTMF sender
+  dtmfSenders.delete(peerId);
   activeCallParticipants.delete(peerId);
   const audioElement = document.getElementById(`audio-${peerId}`);
   if (audioElement) {
@@ -446,31 +449,40 @@ socket.on("new-participant-joined", async ({ newParticipant }) => {
 function updateCallState() {
   const callSection = document.getElementById("callSection");
   const dialPad = document.getElementById("dialPad");
-  if (activeCallParticipants.size > 0) {
+  const isActive = activeCallParticipants.size > 0;
+  
+  if (isActive) {
     callSection.classList.add("call-active");
     dialPad.style.display = "block";
   } else {
     callSection.classList.remove("call-active");
     dialPad.style.display = "none";
+    // Clear DTMF state when call ends
+    dtmfDisplay = "";
+    document.getElementById("dtmfDisplay").textContent = "";
+    dtmfSenders.clear();
   }
 }
 
 // DTMF functionality
-let dtmfSenders = new Map(); // Map to store DTMF senders for each peer
+let dtmfSenders = new Map();
 let dtmfDisplay = "";
 
 async function sendDTMF(digit) {
+  if (!activeCallParticipants.size) {
+    console.warn('Cannot send DTMF: No active call');
+    return;
+  }
+
   console.log('Sending DTMF:', digit);
-  
-  // Try to send DTMF through all active peer connections
   let sent = false;
+
   for (const [peerId, pc] of Object.entries(peers)) {
     if (!dtmfSenders.has(peerId)) {
-      // Get the audio sender
       const audioSender = pc.getSenders().find(sender => 
         sender.track && sender.track.kind === 'audio'
       );
-      if (audioSender && audioSender.dtmf) {
+      if (audioSender?.dtmf) {
         dtmfSenders.set(peerId, audioSender.dtmf);
       }
     }
@@ -478,7 +490,6 @@ async function sendDTMF(digit) {
     const dtmfSender = dtmfSenders.get(peerId);
     if (dtmfSender) {
       try {
-        // Send DTMF with G.711 compatible parameters
         dtmfSender.insertDTMF(digit, 100, 50);
         sent = true;
         console.log(`DTMF sent through peer ${peerId}`);
@@ -517,10 +528,7 @@ socket.on("dtmf-tone", ({ digit }) => {
 });
 
 function leaveCall() {
-  // Clear DTMF state
-  dtmfDisplay = "";
-  document.getElementById("dtmfDisplay").textContent = "";
-  dtmfSenders.clear();
+  if (!activeCallParticipants.size) return;
 
   // Notify all participants that we're leaving
   for (const participant of activeCallParticipants) {
