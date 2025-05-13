@@ -2,114 +2,314 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio Call App</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; margin: 2em; }
-    #onlineUsers button { margin-left: 1em; }
-    audio { display: block; margin-top: 1em; }
-    .user { margin: 0.5em 0; }
-    #debugInfo { 
-      position: fixed; 
-      bottom: 10px; 
-      left: 10px; 
-      background: #f0f0f0; 
-      padding: 10px; 
-      border-radius: 5px; 
-      font-size: 12px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    :root {
+      --primary-color: #4f46e5;
+      --primary-hover: #4338ca;
+      --danger-color: #ef4444;
+      --danger-hover: #dc2626;
+      --success-color: #10b981;
+      --success-hover: #059669;
+      --bg-color: #f9fafb;
+      --card-bg: #ffffff;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --border-color: #e5e7eb;
     }
-    #connectionStatus {
-      font-weight: bold;
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    .status-connected {
-      color: #4CAF50;
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
+      padding: 2rem;
     }
-    .status-disconnected {
-      color: #f44336;
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem;
     }
-    .status-error {
-      color: #ff9800;
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
     }
-    #onlineUsers {
-      margin: 20px 0;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
+
+    .header h2 {
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--primary-color);
+      margin-bottom: 0.5rem;
     }
-    .user {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 1rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      padding: 2rem;
+      margin-bottom: 2rem;
     }
-    .user:last-child {
-      border-bottom: none;
+
+    #loginSection {
+      max-width: 400px;
+      margin: 0 auto;
+      text-align: center;
     }
+
+    #loginSection input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 2px solid var(--border-color);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    #loginSection input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+
     button {
-      padding: 8px 16px;
+      padding: 0.75rem 1.5rem;
       border: none;
-      border-radius: 4px;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      font-weight: 500;
       cursor: pointer;
-      transition: background-color 0.3s;
+      transition: all 0.2s;
+      background: var(--primary-color);
+      color: white;
     }
+
     button:hover {
       opacity: 0.9;
+      transform: translateY(-1px);
     }
+
+    button.danger {
+      background: var(--danger-color);
+    }
+
+    button.success {
+      background: var(--success-color);
+    }
+
+    #onlineUsers {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .user-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: transform 0.2s;
+    }
+
+    .user-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      background: var(--primary-color);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+    }
+
+    .user-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--card-bg);
+      padding: 1.5rem;
+      border-radius: 1rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      max-width: 400px;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .audio-container {
+      background: var(--card-bg);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .audio-container h4 {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    audio {
+      width: 100%;
+      margin: 0.5rem 0;
+    }
+
     #leaveCallBtn {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: #f44336;
-      color: white;
-      padding: 12px 24px;
-      border-radius: 8px;
+      bottom: 2rem;
+      right: 2rem;
+      padding: 1rem 2rem;
+      border-radius: 1rem;
+      font-weight: 600;
       display: none;
+      z-index: 100;
     }
-    #leaveCallBtn:hover {
-      background: #d32f2f;
-    }
+
     .call-active #leaveCallBtn {
       display: block;
+    }
+
+    #debugInfo {
+      position: fixed;
+      bottom: 1rem;
+      left: 1rem;
+      background: var(--card-bg);
+      padding: 1rem;
+      border-radius: 0.75rem;
+      font-size: 0.875rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      z-index: 90;
+    }
+
+    .status-connected {
+      color: var(--success-color);
+    }
+
+    .status-disconnected {
+      color: var(--danger-color);
+    }
+
+    .status-error {
+      color: #f59e0b;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+
+      .card {
+        padding: 1.5rem;
+      }
+
+      #onlineUsers {
+        grid-template-columns: 1fr;
+      }
+
+      .notification {
+        left: 1rem;
+        right: 1rem;
+        max-width: none;
+      }
     }
   </style>
 </head>
 <body>
-  <h2>Audio Call App</h2>
-
-  <div id="loginSection">
-    <input type="text" id="usernameInput" placeholder="Enter your username" />
-    <button onclick="login()">Login</button>
-  </div>
-
-  <div id="callSection" style="display:none;">
-    <h3>Welcome, <span id="myUsername"></span></h3>
-    <h4>Online Users</h4>
-    <div id="onlineUsers"></div>
-
-    <div id="incomingCallNotification" style="display:none; position: fixed; top: 20px; right: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-      <p>Incoming call from <span id="callerName"></span></p>
-      <button onclick="acceptCall()" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; margin-right: 10px; cursor: pointer;">Accept</button>
-      <button onclick="rejectCall()" style="background: #f44336; color: white; border: none; padding: 8px 16px; cursor: pointer;">Reject</button>
+  <div class="container">
+    <div class="header">
+      <h2>Audio Call App</h2>
+      <p>Connect and communicate with others in real-time</p>
     </div>
 
-    <div id="incomingInviteNotification" style="display:none; position: fixed; top: 20px; right: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-      <p>Invitation to join call from <span id="inviterName"></span></p>
-      <button onclick="acceptInvite()" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; margin-right: 10px; cursor: pointer;">Accept</button>
-      <button onclick="rejectInvite()" style="background: #f44336; color: white; border: none; padding: 8px 16px; cursor: pointer;">Reject</button>
+    <div id="loginSection" class="card">
+      <h3>Welcome!</h3>
+      <p style="margin: 1rem 0; color: var(--text-secondary);">Enter your username to start</p>
+      <input type="text" id="usernameInput" placeholder="Enter your username" />
+      <button onclick="login()">Start Chatting</button>
     </div>
 
-    <h4>Audio Streams</h4>
-    <div id="audioContainer">
-      <p>Your Audio (muted to prevent echo):</p>
-      <audio id="localAudio" autoplay playsinline></audio>
-      <p>Remote Audio:</p>
-      <div id="remoteAudios"></div>
-    </div>
+    <div id="callSection" style="display:none;">
+      <div class="card">
+        <h3>Welcome, <span id="myUsername"></span>!</h3>
+        <h4 style="margin: 1rem 0; color: var(--text-secondary);">Online Users</h4>
+        <div id="onlineUsers"></div>
+      </div>
 
-    <button id="leaveCallBtn" onclick="leaveCall()">Leave Call</button>
+      <div id="incomingCallNotification" class="notification" style="display:none;">
+        <h4>Incoming Call</h4>
+        <p>From: <span id="callerName"></span></p>
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+          <button class="success" onclick="acceptCall()">Accept</button>
+          <button class="danger" onclick="rejectCall()">Reject</button>
+        </div>
+      </div>
 
-    <div id="debugInfo">
-      <p>Connection Status: <span id="connectionStatus" class="status-disconnected">Disconnected</span></p>
-      <p>Active Streams: <span id="activeStreams">0</span></p>
-      <p>Server: <span id="serverStatus">Checking...</span></p>
+      <div id="incomingInviteNotification" class="notification" style="display:none;">
+        <h4>Call Invitation</h4>
+        <p>From: <span id="inviterName"></span></p>
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+          <button class="success" onclick="acceptInvite()">Join Call</button>
+          <button class="danger" onclick="rejectInvite()">Decline</button>
+        </div>
+      </div>
+
+      <div class="audio-container">
+        <h4>Audio Streams</h4>
+        <div id="audioContainer">
+          <p>Your Audio (muted to prevent echo):</p>
+          <audio id="localAudio" autoplay playsinline></audio>
+          <p>Remote Audio:</p>
+          <div id="remoteAudios"></div>
+        </div>
+      </div>
+
+      <button id="leaveCallBtn" class="danger" onclick="leaveCall()">Leave Call</button>
+
+      <div id="debugInfo">
+        <p>Connection Status: <span id="connectionStatus" class="status-disconnected">Disconnected</span></p>
+        <p>Active Streams: <span id="activeStreams">0</span></p>
+        <p>Server: <span id="serverStatus">Checking...</span></p>
+      </div>
     </div>
   </div>
 

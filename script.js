@@ -163,9 +163,24 @@ socket.on("online-users", (users) => {
   users.forEach((u) => {
     if (u === myUsername) return;
 
-    const userDiv = document.createElement("div");
-    userDiv.className = "user";
-    userDiv.textContent = u;
+    const userCard = document.createElement("div");
+    userCard.className = "user-card";
+
+    const userInfo = document.createElement("div");
+    userInfo.className = "user-info";
+
+    const avatar = document.createElement("div");
+    avatar.className = "user-avatar";
+    avatar.textContent = u.charAt(0).toUpperCase();
+
+    const username = document.createElement("span");
+    username.textContent = u;
+
+    userInfo.appendChild(avatar);
+    userInfo.appendChild(username);
+
+    const userActions = document.createElement("div");
+    userActions.className = "user-actions";
 
     const callBtn = document.createElement("button");
     callBtn.textContent = "Call";
@@ -175,9 +190,12 @@ socket.on("online-users", (users) => {
     inviteBtn.textContent = "Invite";
     inviteBtn.onclick = () => inviteUser(u);
 
-    userDiv.appendChild(callBtn);
-    userDiv.appendChild(inviteBtn);
-    container.appendChild(userDiv);
+    userActions.appendChild(callBtn);
+    userActions.appendChild(inviteBtn);
+
+    userCard.appendChild(userInfo);
+    userCard.appendChild(userActions);
+    container.appendChild(userCard);
   });
 });
 
