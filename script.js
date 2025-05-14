@@ -49,11 +49,7 @@ async function login() {
     document.getElementById("callSection").style.display = "block";
     document.getElementById("myUsername").textContent = myUsername;
 
-    // Emit login event and request current online users
     socket.emit("login", myUsername);
-    
-    // Request current online users list
-    socket.emit("get-online-users");
   } catch (error) {
     console.error("Failed to setup media stream:", error);
     alert("Failed to access microphone. Please ensure you have granted microphone permissions.");
@@ -70,7 +66,7 @@ async function setupLocalStream() {
         channelCount: 1,
         sampleRate: 8000,
         sampleSize: 16,
-        codec: 'PCMA'
+        codec: 'PCM'
       },
       video: false 
     });
@@ -92,26 +88,15 @@ function createPeerConnection(peerId) {
     iceTransportPolicy: 'all'
   });
 
-  // Add SDP modification to ensure PCMA codec
+  // Add SDP modification to ensure G.711 codec
   pc.onnegotiationneeded = async () => {
     try {
       const offer = await pc.createOffer();
-      // Modify SDP to use PCMA (G.711 A-law)
+      // Modify SDP to use G.711
       const modifiedSdp = offer.sdp
-        .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:8 PCMA/8000\r\n')
+        .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:0 PCM/8000\r\n')
         .replace(/(a=rtpmap:.*\r\n)/g, '') // Remove other codecs
-        .replace(/(a=fmtp:.*\r\n)/g, '') // Remove fmtp lines
-        .replace(/(a=rtcp-fb:.*\r\n)/g, '') // Remove RTCP feedback
-        .replace(/(a=extmap:.*\r\n)/g, '') // Remove extension maps
-        .replace(/(a=rtcp-mux\r\n)/g, '') // Remove RTCP mux
-        .replace(/(a=setup:.*\r\n)/g, '') // Remove setup
-        .replace(/(a=mid:.*\r\n)/g, '') // Remove mid
-        .replace(/(a=sendrecv\r\n)/g, '') // Remove sendrecv
-        .replace(/(a=ice-ufrag:.*\r\n)/g, '') // Remove ICE ufrag
-        .replace(/(a=ice-pwd:.*\r\n)/g, '') // Remove ICE pwd
-        .replace(/(a=fingerprint:.*\r\n)/g, '') // Remove fingerprint
-        .replace(/(a=candidate:.*\r\n)/g, '') // Remove candidates
-        .replace(/(a=end-of-candidates\r\n)/g, ''); // Remove end-of-candidates
+        .replace(/(a=fmtp:.*\r\n)/g, ''); // Remove fmtp lines
       
       const modifiedOffer = {
         ...offer,
@@ -182,12 +167,6 @@ function updateActiveStreams() {
 }
 
 async function startCall(toUser) {
-  // Check if user is already in the call
-  if (activeCallParticipants.has(toUser)) {
-    console.warn(`Cannot call ${toUser}: Already in call with this user`);
-    return;
-  }
-
   const pc = createPeerConnection(toUser);
   peers[toUser] = pc;
   activeCallParticipants.add(toUser);
@@ -206,12 +185,6 @@ async function startCall(toUser) {
 }
 
 function inviteUser(toUser) {
-  // Check if user is already in the call
-  if (activeCallParticipants.has(toUser)) {
-    console.warn(`Cannot invite ${toUser}: Already in call with this user`);
-    return;
-  }
-
   if (activeCallParticipants.size === 0) {
     // If no active call, start a new one
     startCall(toUser);
@@ -222,7 +195,6 @@ function inviteUser(toUser) {
 }
 
 socket.on("online-users", (users) => {
-  console.log("Received online users:", users);
   const container = document.getElementById("onlineUsers");
   container.innerHTML = "";
 
@@ -242,16 +214,6 @@ socket.on("online-users", (users) => {
     const username = document.createElement("span");
     username.textContent = u;
 
-    // Add call status indicator
-    if (activeCallParticipants.has(u)) {
-      const status = document.createElement("span");
-      status.className = "call-status";
-      status.textContent = "In Call";
-      status.style.color = "var(--success-color)";
-      status.style.marginLeft = "0.5rem";
-      username.appendChild(status);
-    }
-
     userInfo.appendChild(avatar);
     userInfo.appendChild(username);
 
@@ -260,12 +222,10 @@ socket.on("online-users", (users) => {
 
     const callBtn = document.createElement("button");
     callBtn.textContent = "Call";
-    callBtn.disabled = activeCallParticipants.has(u);
     callBtn.onclick = () => startCall(u);
 
     const inviteBtn = document.createElement("button");
     inviteBtn.textContent = "Invite";
-    inviteBtn.disabled = activeCallParticipants.has(u);
     inviteBtn.onclick = () => inviteUser(u);
 
     userActions.appendChild(callBtn);
@@ -499,7 +459,6 @@ async function sendDTMF(digit) {
   console.log('Sending DTMF:', digit);
   let sent = false;
 
-  // Try to send DTMF through all active peer connections
   for (const [peerId, pc] of Object.entries(peers)) {
     if (!dtmfSenders.has(peerId)) {
       const audioSender = pc.getSenders().find(sender => 
@@ -581,17 +540,9 @@ function updateCallState() {
   if (isActive) {
     callSection.classList.add("call-active");
     dialPad.style.display = "block";
-    // Enable DTMF for all participants
-    document.querySelectorAll('.dial-btn').forEach(btn => {
-      btn.disabled = false;
-    });
   } else {
     callSection.classList.remove("call-active");
     dialPad.style.display = "none";
-    // Disable DTMF buttons when call ends
-    document.querySelectorAll('.dial-btn').forEach(btn => {
-      btn.disabled = true;
-    });
     // Clear DTMF state when call ends
     cleanupDTMF();
   }
@@ -633,43 +584,4 @@ socket.on("participant-left", ({ leavingUserId }) => {
   console.log(`Participant left: ${leavingUserId}`);
   removeParticipant(leavingUserId);
   updateCallState();
-});
-
-// Update the HTML to show DTMF is available for all participants
-document.addEventListener('DOMContentLoaded', () => {
-  const dialPad = document.getElementById("dialPad");
-  if (dialPad) {
-    dialPad.innerHTML = `
-      <h4>Dial Pad (Available to all call participants)</h4>
-      <div class="dial-grid">
-        <button class="dial-btn" onclick="sendDTMF('1')" disabled>1</button>
-        <button class="dial-btn" onclick="sendDTMF('2')" disabled>2</button>
-        <button class="dial-btn" onclick="sendDTMF('3')" disabled>3</button>
-        <button class="dial-btn" onclick="sendDTMF('4')" disabled>4</button>
-        <button class="dial-btn" onclick="sendDTMF('5')" disabled>5</button>
-        <button class="dial-btn" onclick="sendDTMF('6')" disabled>6</button>
-        <button class="dial-btn" onclick="sendDTMF('7')" disabled>7</button>
-        <button class="dial-btn" onclick="sendDTMF('8')" disabled>8</button>
-        <button class="dial-btn" onclick="sendDTMF('9')" disabled>9</button>
-        <button class="dial-btn" onclick="sendDTMF('*')" disabled>*</button>
-        <button class="dial-btn" onclick="sendDTMF('0')" disabled>0</button>
-        <button class="dial-btn" onclick="sendDTMF('#')" disabled>#</button>
-      </div>
-      <div id="dtmfDisplay" class="dtmf-display"></div>
-    `;
-  }
-});
-
-// Add handler for user joined event
-socket.on("user-joined", (username) => {
-  console.log("User joined:", username);
-  // Request updated online users list
-  socket.emit("get-online-users");
-});
-
-// Add handler for user left event
-socket.on("user-left", (username) => {
-  console.log("User left:", username);
-  // Request updated online users list
-  socket.emit("get-online-users");
 });
