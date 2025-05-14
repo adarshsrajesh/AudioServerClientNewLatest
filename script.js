@@ -235,6 +235,11 @@ socket.on("online-users", (users) => {
   const container = document.getElementById("onlineUsers");
   container.innerHTML = "";
 
+  if (!Array.isArray(users)) {
+    console.error("Received invalid users data:", users);
+    return;
+  }
+
   users.forEach((u) => {
     if (u === myUsername) return;
 
@@ -251,7 +256,6 @@ socket.on("online-users", (users) => {
     const username = document.createElement("span");
     username.textContent = u;
 
-    // Add call status indicator
     if (activeCallParticipants.has(u)) {
       const status = document.createElement("span");
       status.className = "call-status";
@@ -287,61 +291,83 @@ socket.on("online-users", (users) => {
 });
 
 socket.on("incoming-call", async ({ fromUserId, offer }) => {
-  // Store the pending call information
-  pendingCall = { fromUserId, offer };
-  
-  // Show the incoming call notification
-  document.getElementById("callerName").textContent = fromUserId;
-  document.getElementById("incomingCallNotification").style.display = "block";
+  try {
+    // Store the pending call information
+    pendingCall = { fromUserId, offer };
+    
+    // Show the incoming call notification
+    document.getElementById("callerName").textContent = fromUserId;
+    document.getElementById("incomingCallNotification").style.display = "block";
+  } catch (error) {
+    console.error("Error handling incoming call:", error);
+    alert("Error receiving call. Please try again.");
+  }
 });
 
 async function acceptCall() {
   if (!pendingCall) return;
   
-  const { fromUserId, offer } = pendingCall;
-  const pc = createPeerConnection(fromUserId);
-  peers[fromUserId] = pc;
-  activeCallParticipants.add(fromUserId);
+  try {
+    const { fromUserId, offer } = pendingCall;
+    const pc = createPeerConnection(fromUserId);
+    peers[fromUserId] = pc;
+    activeCallParticipants.add(fromUserId);
 
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-  localStream.getTracks().forEach((track) =>
-    pc.addTrack(track, localStream)
-  );
+    localStream.getTracks().forEach((track) =>
+      pc.addTrack(track, localStream)
+    );
 
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
 
-  socket.emit("answer-call", {
-    toUserId: fromUserId,
-    answer: pc.localDescription,
-  });
+    socket.emit("answer-call", {
+      toUserId: fromUserId,
+      answer: pc.localDescription,
+    });
 
-  // Hide the notification
-  document.getElementById("incomingCallNotification").style.display = "none";
-  pendingCall = null;
-  updateCallState();
+    // Hide the notification
+    document.getElementById("incomingCallNotification").style.display = "none";
+    pendingCall = null;
+    updateCallState();
+  } catch (error) {
+    console.error("Error accepting call:", error);
+    alert("Failed to accept call. Please try again.");
+    removeParticipant(fromUserId);
+  }
 }
 
 function rejectCall() {
   if (!pendingCall) return;
   
-  socket.emit("reject-call", {
-    toUserId: pendingCall.fromUserId
-  });
-  
-  // Hide the notification
-  document.getElementById("incomingCallNotification").style.display = "none";
-  pendingCall = null;
+  try {
+    socket.emit("reject-call", {
+      toUserId: pendingCall.fromUserId
+    });
+    
+    // Hide the notification
+    document.getElementById("incomingCallNotification").style.display = "none";
+    pendingCall = null;
+  } catch (error) {
+    console.error("Error rejecting call:", error);
+    alert("Failed to reject call. Please try again.");
+  }
 }
 
 socket.on("call-answered", async ({ fromUserId, answer }) => {
-  console.log(`Call answered by: ${fromUserId}`);
-  if (peers[fromUserId]) {
-    await peers[fromUserId].setRemoteDescription(new RTCSessionDescription(answer));
-    activeCallParticipants.add(fromUserId);
-    updateActiveStreams();
-    updateCallState();
+  try {
+    console.log(`Call answered by: ${fromUserId}`);
+    if (peers[fromUserId]) {
+      await peers[fromUserId].setRemoteDescription(new RTCSessionDescription(answer));
+      activeCallParticipants.add(fromUserId);
+      updateActiveStreams();
+      updateCallState();
+    }
+  } catch (error) {
+    console.error("Error handling call answer:", error);
+    alert("Error establishing call connection. Please try again.");
+    removeParticipant(fromUserId);
   }
 });
 
@@ -681,4 +707,10 @@ socket.on("user-left", (username) => {
   console.log("User left:", username);
   // Request updated online users list
   socket.emit("get-online-users");
+});
+
+// Add error handler for socket events
+socket.on("error", (error) => {
+  console.error("Socket error:", error);
+  alert(error);
 });
