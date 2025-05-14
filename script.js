@@ -49,7 +49,11 @@ async function login() {
     document.getElementById("callSection").style.display = "block";
     document.getElementById("myUsername").textContent = myUsername;
 
+    // Emit login event and request online users
     socket.emit("login", myUsername);
+    
+    // Request online users list after login
+    socket.emit("get-online-users");
   } catch (error) {
     console.error("Failed to setup media stream:", error);
     alert("Failed to access microphone. Please ensure you have granted microphone permissions.");
@@ -91,7 +95,11 @@ function createPeerConnection(peerId) {
   // Add SDP modification to ensure G.711 codec
   pc.onnegotiationneeded = async () => {
     try {
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      });
+      
       // Modify SDP to use G.711
       const modifiedSdp = offer.sdp
         .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:0 PCM/8000\r\n')
@@ -102,6 +110,7 @@ function createPeerConnection(peerId) {
         ...offer,
         sdp: modifiedSdp
       };
+      
       await pc.setLocalDescription(modifiedOffer);
     } catch (error) {
       console.error('Error during negotiation:', error);
@@ -173,21 +182,36 @@ async function startCall(toUser) {
     return;
   }
 
-  const pc = createPeerConnection(toUser);
-  peers[toUser] = pc;
-  activeCallParticipants.add(toUser);
+  try {
+    const pc = createPeerConnection(toUser);
+    peers[toUser] = pc;
+    activeCallParticipants.add(toUser);
 
-  localStream.getTracks().forEach((track) =>
-    pc.addTrack(track, localStream)
-  );
+    // Add local stream tracks
+    localStream.getTracks().forEach((track) => {
+      pc.addTrack(track, localStream);
+    });
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    // Create and set local description
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: false
+    });
+    
+    await pc.setLocalDescription(offer);
 
-  socket.emit("call-user", {
-    toUserId: toUser,
-    offer: pc.localDescription,
-  });
+    // Emit call-user event
+    socket.emit("call-user", {
+      toUserId: toUser,
+      offer: pc.localDescription,
+    });
+
+    console.log(`Call initiated with ${toUser}`);
+  } catch (error) {
+    console.error("Error starting call:", error);
+    alert("Failed to start call. Please try again.");
+    removeParticipant(toUser);
+  }
 }
 
 function inviteUser(toUser) {
@@ -207,6 +231,7 @@ function inviteUser(toUser) {
 }
 
 socket.on("online-users", (users) => {
+  console.log("Received online users:", users);
   const container = document.getElementById("onlineUsers");
   container.innerHTML = "";
 
@@ -643,3 +668,17 @@ function updateDialPad() {
     <div id="dtmfDisplay" class="dtmf-display"></div>
   `;
 }
+
+// Add handler for user joined
+socket.on("user-joined", (username) => {
+  console.log("User joined:", username);
+  // Request updated online users list
+  socket.emit("get-online-users");
+});
+
+// Add handler for user left
+socket.on("user-left", (username) => {
+  console.log("User left:", username);
+  // Request updated online users list
+  socket.emit("get-online-users");
+});
