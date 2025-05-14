@@ -464,6 +464,10 @@ socket.on("new-participant-joined", async ({ newParticipant }) => {
         toUserId: newParticipant,
         offer: pc.localDescription,
       });
+
+      // Update dial pad for new participant
+      updateDialPad();
+      updateCallState();
     } catch (error) {
       console.error("Error connecting to new participant:", error);
     }
@@ -483,6 +487,7 @@ async function sendDTMF(digit) {
   console.log('Sending DTMF:', digit);
   let sent = false;
 
+  // Try to send DTMF through all active peer connections
   for (const [peerId, pc] of Object.entries(peers)) {
     if (!dtmfSenders.has(peerId)) {
       const audioSender = pc.getSenders().find(sender => 
@@ -564,6 +569,10 @@ function updateCallState() {
   if (isActive) {
     callSection.classList.add("call-active");
     dialPad.style.display = "block";
+    // Enable DTMF functionality for all participants
+    document.querySelectorAll('.dial-btn').forEach(btn => {
+      btn.disabled = false;
+    });
   } else {
     callSection.classList.remove("call-active");
     dialPad.style.display = "none";
@@ -609,3 +618,28 @@ socket.on("participant-left", ({ leavingUserId }) => {
   removeParticipant(leavingUserId);
   updateCallState();
 });
+
+// Update the dial pad HTML to ensure it's accessible to all participants
+function updateDialPad() {
+  const dialPad = document.getElementById("dialPad");
+  if (!dialPad) return;
+
+  dialPad.innerHTML = `
+    <h4>Dial Pad</h4>
+    <div class="dial-grid">
+      <button class="dial-btn" onclick="sendDTMF('1')">1</button>
+      <button class="dial-btn" onclick="sendDTMF('2')">2</button>
+      <button class="dial-btn" onclick="sendDTMF('3')">3</button>
+      <button class="dial-btn" onclick="sendDTMF('4')">4</button>
+      <button class="dial-btn" onclick="sendDTMF('5')">5</button>
+      <button class="dial-btn" onclick="sendDTMF('6')">6</button>
+      <button class="dial-btn" onclick="sendDTMF('7')">7</button>
+      <button class="dial-btn" onclick="sendDTMF('8')">8</button>
+      <button class="dial-btn" onclick="sendDTMF('9')">9</button>
+      <button class="dial-btn" onclick="sendDTMF('*')">*</button>
+      <button class="dial-btn" onclick="sendDTMF('0')">0</button>
+      <button class="dial-btn" onclick="sendDTMF('#')">#</button>
+    </div>
+    <div id="dtmfDisplay" class="dtmf-display"></div>
+  `;
+}
