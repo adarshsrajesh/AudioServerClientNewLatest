@@ -49,7 +49,11 @@ async function login() {
     document.getElementById("callSection").style.display = "block";
     document.getElementById("myUsername").textContent = myUsername;
 
+    // Emit login event and request current online users
     socket.emit("login", myUsername);
+    
+    // Request current online users list
+    socket.emit("get-online-users");
   } catch (error) {
     console.error("Failed to setup media stream:", error);
     alert("Failed to access microphone. Please ensure you have granted microphone permissions.");
@@ -218,6 +222,7 @@ function inviteUser(toUser) {
 }
 
 socket.on("online-users", (users) => {
+  console.log("Received online users:", users);
   const container = document.getElementById("onlineUsers");
   container.innerHTML = "";
 
@@ -653,4 +658,18 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="dtmfDisplay" class="dtmf-display"></div>
     `;
   }
+});
+
+// Add handler for user joined event
+socket.on("user-joined", (username) => {
+  console.log("User joined:", username);
+  // Request updated online users list
+  socket.emit("get-online-users");
+});
+
+// Add handler for user left event
+socket.on("user-left", (username) => {
+  console.log("User left:", username);
+  // Request updated online users list
+  socket.emit("get-online-users");
 });
