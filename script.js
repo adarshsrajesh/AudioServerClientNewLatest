@@ -66,7 +66,7 @@ async function setupLocalStream() {
         channelCount: 1,
         sampleRate: 8000,
         sampleSize: 16,
-        codec: 'PCM'
+        codec: 'PCMA'
       },
       video: false 
     });
@@ -88,15 +88,26 @@ function createPeerConnection(peerId) {
     iceTransportPolicy: 'all'
   });
 
-  // Add SDP modification to ensure G.711 codec
+  // Add SDP modification to ensure PCMA codec
   pc.onnegotiationneeded = async () => {
     try {
       const offer = await pc.createOffer();
-      // Modify SDP to use G.711
+      // Modify SDP to use PCMA (G.711 A-law)
       const modifiedSdp = offer.sdp
-        .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:0 PCM/8000\r\n')
+        .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:8 PCMA/8000\r\n')
         .replace(/(a=rtpmap:.*\r\n)/g, '') // Remove other codecs
-        .replace(/(a=fmtp:.*\r\n)/g, ''); // Remove fmtp lines
+        .replace(/(a=fmtp:.*\r\n)/g, '') // Remove fmtp lines
+        .replace(/(a=rtcp-fb:.*\r\n)/g, '') // Remove RTCP feedback
+        .replace(/(a=extmap:.*\r\n)/g, '') // Remove extension maps
+        .replace(/(a=rtcp-mux\r\n)/g, '') // Remove RTCP mux
+        .replace(/(a=setup:.*\r\n)/g, '') // Remove setup
+        .replace(/(a=mid:.*\r\n)/g, '') // Remove mid
+        .replace(/(a=sendrecv\r\n)/g, '') // Remove sendrecv
+        .replace(/(a=ice-ufrag:.*\r\n)/g, '') // Remove ICE ufrag
+        .replace(/(a=ice-pwd:.*\r\n)/g, '') // Remove ICE pwd
+        .replace(/(a=fingerprint:.*\r\n)/g, '') // Remove fingerprint
+        .replace(/(a=candidate:.*\r\n)/g, '') // Remove candidates
+        .replace(/(a=end-of-candidates\r\n)/g, ''); // Remove end-of-candidates
       
       const modifiedOffer = {
         ...offer,
@@ -483,6 +494,7 @@ async function sendDTMF(digit) {
   console.log('Sending DTMF:', digit);
   let sent = false;
 
+  // Try to send DTMF through all active peer connections
   for (const [peerId, pc] of Object.entries(peers)) {
     if (!dtmfSenders.has(peerId)) {
       const audioSender = pc.getSenders().find(sender => 
@@ -564,9 +576,17 @@ function updateCallState() {
   if (isActive) {
     callSection.classList.add("call-active");
     dialPad.style.display = "block";
+    // Enable DTMF for all participants
+    document.querySelectorAll('.dial-btn').forEach(btn => {
+      btn.disabled = false;
+    });
   } else {
     callSection.classList.remove("call-active");
     dialPad.style.display = "none";
+    // Disable DTMF buttons when call ends
+    document.querySelectorAll('.dial-btn').forEach(btn => {
+      btn.disabled = true;
+    });
     // Clear DTMF state when call ends
     cleanupDTMF();
   }
@@ -608,4 +628,29 @@ socket.on("participant-left", ({ leavingUserId }) => {
   console.log(`Participant left: ${leavingUserId}`);
   removeParticipant(leavingUserId);
   updateCallState();
+});
+
+// Update the HTML to show DTMF is available for all participants
+document.addEventListener('DOMContentLoaded', () => {
+  const dialPad = document.getElementById("dialPad");
+  if (dialPad) {
+    dialPad.innerHTML = `
+      <h4>Dial Pad (Available to all call participants)</h4>
+      <div class="dial-grid">
+        <button class="dial-btn" onclick="sendDTMF('1')" disabled>1</button>
+        <button class="dial-btn" onclick="sendDTMF('2')" disabled>2</button>
+        <button class="dial-btn" onclick="sendDTMF('3')" disabled>3</button>
+        <button class="dial-btn" onclick="sendDTMF('4')" disabled>4</button>
+        <button class="dial-btn" onclick="sendDTMF('5')" disabled>5</button>
+        <button class="dial-btn" onclick="sendDTMF('6')" disabled>6</button>
+        <button class="dial-btn" onclick="sendDTMF('7')" disabled>7</button>
+        <button class="dial-btn" onclick="sendDTMF('8')" disabled>8</button>
+        <button class="dial-btn" onclick="sendDTMF('9')" disabled>9</button>
+        <button class="dial-btn" onclick="sendDTMF('*')" disabled>*</button>
+        <button class="dial-btn" onclick="sendDTMF('0')" disabled>0</button>
+        <button class="dial-btn" onclick="sendDTMF('#')" disabled>#</button>
+      </div>
+      <div id="dtmfDisplay" class="dtmf-display"></div>
+    `;
+  }
 });
