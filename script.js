@@ -1,3 +1,5 @@
+const { log } = require("console");
+
 // const socket = io("http://192.168.137.69:5000");
 const socket = io("https://audioserver.onrender.com");
 
@@ -294,6 +296,8 @@ socket.on("incoming-call", async ({ fromUserId, offer }) => {
   try {
     // Store the pending call information
     pendingCall = { fromUserId, offer };
+    // console.log(offer);
+    
     
     // Show the incoming call notification
     document.getElementById("callerName").textContent = fromUserId;
@@ -309,6 +313,8 @@ async function acceptCall() {
   
   try {
     const { fromUserId, offer } = pendingCall;
+    console.log(offer);
+    
     const pc = createPeerConnection(fromUserId);
     peers[fromUserId] = pc;
     activeCallParticipants.add(fromUserId);
