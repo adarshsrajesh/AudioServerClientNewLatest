@@ -157,6 +157,9 @@ function createPeerConnection(peerId) {
 //     console.error("Negotiation error:", error);
 //   }
 // };
+
+// error
+
   // pc.onnegotiationneeded = async () => {
   //   try {
   //     const offer = await pc.createOffer({
@@ -244,6 +247,73 @@ function createPeerConnection(peerId) {
   //     }
   //   }
   // };
+
+  pc.onnegotiationneeded = async () => {
+  try {
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: false,
+      iceRestart: true
+    });
+
+    let modifiedSdp = offer.sdp;
+
+    // Find the audio m-line and its payload types
+    const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
+    if (!audioMLineMatch) {
+      throw new Error('No audio m-line found in SDP');
+    }
+
+    const audioMLine = audioMLineMatch[0];
+    const payloadTypes = audioMLine.split(' ').slice(3); // Get payload types
+
+    // We’ll use payload type 0 for PCMU
+    const selectedPayloadType = '0';
+
+    // Clean and reconstruct SDP
+    modifiedSdp = modifiedSdp
+      // Replace m-line to only include payload type 0
+      .replace(/m=audio .*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
+      // Remove all codec-related attributes
+      .replace(/a=rtpmap:\d+ .*\r\n/g, '')
+      .replace(/a=fmtp:\d+ .*\r\n/g, '')
+      .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
+      // Remove extensions and other unrelated lines
+      .replace(/a=extmap:\d+ .*\r\n/g, '')
+      .replace(/a=mid:.*\r\n/g, '')
+      .replace(/a=msid:.*\r\n/g, '')
+      .replace(/a=ssrc:.*\r\n/g, '')
+      .replace(/a=ssrc-group:.*\r\n/g, '')
+      .replace(/a=rtcp-mux\r\n/g, '')
+      .replace(/a=rtcp-rsize\r\n/g, '')
+      .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
+      .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
+      .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
+      .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
+
+    // Add the correct rtpmap line for PCMU
+    modifiedSdp = modifiedSdp.replace(
+      /(m=audio.*\r\n)/,
+      `$1a=rtpmap:${selectedPayloadType} PCMU/8000\r\n`
+    );
+
+    const modifiedOffer = {
+      type: offer.type,
+      sdp: modifiedSdp
+    };
+
+    await pc.setLocalDescription(modifiedOffer);
+  } catch (error) {
+    console.error('Error during negotiation:', error);
+    // Fallback to unmodified offer
+    try {
+      await pc.setLocalDescription(offer);
+    } catch (retryError) {
+      console.error('Error setting original offer:', retryError);
+    }
+  }
+};
+
 
   pc.ontrack = (event) => {
     console.log('Received remote track from:', peerId);
