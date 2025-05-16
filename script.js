@@ -135,9 +135,11 @@ function createPeerConnection(peerId) {
     const turnOnlyConfig = {
       ...iceServers,
       iceTransportPolicy: 'relay', // Force TURN only
-      iceServers: iceServers.iceServers.filter(server => 
-        server.urls.some(url => url.startsWith('turn:'))
-      )
+      iceServers: iceServers.iceServers.filter(server => {
+        // Handle both string and array URLs
+        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+        return urls.some(url => url.startsWith('turn:'));
+      })
     };
     pc.setConfiguration(turnOnlyConfig);
     pc.restartIce();
