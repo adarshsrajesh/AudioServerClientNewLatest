@@ -102,11 +102,13 @@ function createPeerConnection(peerId) {
         offerToReceiveVideo: false
       });
       
-      // Modify SDP to use G.711
+      // Modify SDP to use G.711 and ensure proper audio track handling
       const modifiedSdp = offer.sdp
         .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:0 PCM/8000\r\n')
         .replace(/(a=rtpmap:.*\r\n)/g, '') // Remove other codecs
-        .replace(/(a=fmtp:.*\r\n)/g, ''); // Remove fmtp lines
+        .replace(/(a=fmtp:.*\r\n)/g, '') // Remove fmtp lines
+        .replace(/(a=sendrecv)/g, 'a=sendonly') // Ensure proper direction
+        .replace(/(a=recvonly)/g, 'a=sendrecv'); // Ensure proper direction
       
       const modifiedOffer = {
         ...offer,
@@ -127,6 +129,15 @@ function createPeerConnection(peerId) {
     remoteAudio.srcObject = event.streams[0];
     remoteAudio.id = `audio-${peerId}`;
     document.getElementById("remoteAudios").appendChild(remoteAudio);
+    
+    // Initialize DTMF sender when track is received
+    const audioSender = pc.getSenders().find(sender => 
+      sender.track && sender.track.kind === 'audio'
+    );
+    if (audioSender?.dtmf) {
+      dtmfSenders.set(peerId, audioSender.dtmf);
+    }
+    
     updateActiveStreams();
   };
 
@@ -546,29 +557,37 @@ async function sendDTMF(digit) {
 
   // Try to send DTMF through all active peer connections
   for (const [peerId, pc] of Object.entries(peers)) {
-    if (!dtmfSenders.has(peerId)) {
-      const audioSender = pc.getSenders().find(sender => 
-        sender.track && sender.track.kind === 'audio'
-      );
-      if (audioSender?.dtmf) {
-        dtmfSenders.set(peerId, audioSender.dtmf);
+    try {
+      // Get or create DTMF sender
+      if (!dtmfSenders.has(peerId)) {
+        const audioSender = pc.getSenders().find(sender => 
+          sender.track && sender.track.kind === 'audio'
+        );
+        if (audioSender?.dtmf) {
+          dtmfSenders.set(peerId, audioSender.dtmf);
+        }
       }
-    }
 
-    const dtmfSender = dtmfSenders.get(peerId);
-    if (dtmfSender) {
-      try {
-        dtmfSender.insertDTMF(digit, 100, 50);
-        sent = true;
-        console.log(`DTMF sent through peer ${peerId}`);
-      } catch (error) {
-        console.error(`Failed to send DTMF through peer ${peerId}:`, error);
+      const dtmfSender = dtmfSenders.get(peerId);
+      if (dtmfSender) {
+        // Ensure the DTMF sender is ready
+        if (dtmfSender.canInsertDTMF) {
+          dtmfSender.insertDTMF(digit, 100, 50);
+          sent = true;
+          console.log(`DTMF sent through peer ${peerId}`);
+        } else {
+          console.warn(`DTMF sender not ready for peer ${peerId}`);
+        }
+      } else {
+        console.warn(`No DTMF sender available for peer ${peerId}`);
       }
+    } catch (error) {
+      console.error(`Failed to send DTMF through peer ${peerId}:`, error);
     }
   }
 
   if (!sent) {
-    console.warn('No DTMF sender available');
+    console.warn('No DTMF sender available for any peer');
     return;
   }
 
