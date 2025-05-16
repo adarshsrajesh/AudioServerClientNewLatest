@@ -258,38 +258,35 @@ pc.onnegotiationneeded = async () => {
 
     let modifiedSdp = offer.sdp;
 
-    // Find the audio m-line and its payload types
+    // Find the audio m-line
     const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
     if (!audioMLineMatch) {
       throw new Error('No audio m-line found in SDP');
     }
 
-    const audioMLine = audioMLineMatch[0];
     const selectedPayloadType = '0'; // PCMU
-
-    // Extract the original MID value
     const midMatch = modifiedSdp.match(/a=mid:(\S+)\r\n/);
     const mid = midMatch ? midMatch[1] : '0';
 
-    // Clean and reconstruct SDP
     modifiedSdp = modifiedSdp
       .replace(/m=audio .*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
       .replace(/a=rtpmap:\d+ .*\r\n/g, '')
       .replace(/a=fmtp:\d+ .*\r\n/g, '')
       .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
       .replace(/a=extmap:\d+ .*\r\n/g, '')
-      .replace(/a=mid:.*\r\n/g, '') // remove existing mid
+      .replace(/a=mid:.*\r\n/g, '')
       .replace(/a=msid:.*\r\n/g, '')
       .replace(/a=ssrc:.*\r\n/g, '')
       .replace(/a=ssrc-group:.*\r\n/g, '')
-      .replace(/a=rtcp-mux\r\n/g, '')
+      // KEEP a=rtcp-mux or you'll break BUNDLE
+      // .replace(/a=rtcp-mux\r\n/g, '')
       .replace(/a=rtcp-rsize\r\n/g, '')
       .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
       .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
       .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
       .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
 
-    // Add required lines: rtpmap and mid
+    // Re-insert required lines
     modifiedSdp = modifiedSdp.replace(
       /(m=audio.*\r\n)/,
       `$1a=rtpmap:${selectedPayloadType} PCMU/8000\r\n` +
@@ -304,7 +301,6 @@ pc.onnegotiationneeded = async () => {
     await pc.setLocalDescription(modifiedOffer);
   } catch (error) {
     console.error('Error during negotiation:', error);
-    // Fallback to unmodified offer
     try {
       await pc.setLocalDescription(offer);
     } catch (retryError) {
