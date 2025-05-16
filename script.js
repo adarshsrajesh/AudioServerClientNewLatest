@@ -141,19 +141,6 @@ function createPeerConnection(peerId) {
     iceCandidatePoolSize: 10
   });
 
-  // Set codec preferences
-  pc.getTransceivers().forEach(transceiver => {
-    if (transceiver.sender.track && transceiver.sender.track.kind === 'audio') {
-      transceiver.setCodecPreferences([
-        {
-          mimeType: 'audio/PCM',
-          clockRate: 8000,
-          channels: 1
-        }
-      ]);
-    }
-  });
-
   // Add reconnection attempt counter
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 3;
@@ -626,145 +613,30 @@ async function acceptCall() {
   
   try {
     const { fromUserId, offer } = pendingCall;
-    console.log('Accepting call from:', fromUserId);
+    console.log(offer);
     
     const pc = createPeerConnection(fromUserId);
     peers[fromUserId] = pc;
     activeCallParticipants.add(fromUserId);
 
-    // Set up ICE connection monitoring before setting remote description
-    let iceConnectionTimeout = setTimeout(() => {
-      if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.log('ICE connection timeout, forcing TURN usage');
-        forceTurnUsage();
-      }
-    }, 3000);
-
-    // Set up connection state monitoring
-    pc.onconnectionstatechange = () => {
-      console.log(`Connection state with ${fromUserId}:`, pc.connectionState);
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        console.log('Connection failed or disconnected, forcing TURN usage');
-        forceTurnUsage();
-      }
-    };
-
-    // Set up ICE connection state monitoring
-    pc.oniceconnectionstatechange = () => {
-      console.log(`ICE connection state with ${fromUserId}:`, pc.iceConnectionState);
-      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-        console.log('ICE connection failed or disconnected, forcing TURN usage');
-        forceTurnUsage();
-      }
-    };
-
-    // Set up ICE gathering state monitoring
-    pc.onicegatheringstatechange = () => {
-      console.log(`ICE gathering state with ${fromUserId}:`, pc.iceGatheringState);
-      if (pc.iceGatheringState === 'gathering') {
-        // Set a timeout for ICE gathering
-        setTimeout(() => {
-          if (pc.iceGatheringState === 'gathering') {
-            console.log('ICE gathering timeout, forcing TURN usage');
-            forceTurnUsage();
-          }
-        }, 3000);
-      }
-    };
-
-    // Set up ICE candidate handling
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('ICE candidate:', event.candidate);
-        // Check if this is a TURN candidate
-        if (event.candidate.candidate.indexOf('relay') !== -1) {
-          console.log('Using TURN server for connection');
-          usingTurn = true;
-        }
-        socket.emit("ice-candidate", {
-          toUserId: fromUserId,
-          candidate: event.candidate,
-        });
-      }
-    };
-
-    // Set remote description first
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    console.log('Remote description set successfully');
 
-    // Add local stream tracks
-    localStream.getTracks().forEach((track) => {
-      pc.addTrack(track, localStream);
-    });
-    console.log('Local tracks added');
+    localStream.getTracks().forEach((track) =>
+      pc.addTrack(track, localStream)
+    );
 
-    // Create and set local description
-    const answer = await pc.createAnswer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: false
-    });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
 
-    // Modify the answer SDP to ensure proper codec configuration
-    let modifiedSdp = answer.sdp;
-    const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
-    if (audioMLineMatch) {
-      const audioMLine = audioMLineMatch[0];
-      const payloadTypes = audioMLine.split(' ').slice(3);
-      let selectedPayloadType = '0';
-      if (!payloadTypes.includes('0')) {
-        for (let i = 0; i < 96; i++) {
-          if (!payloadTypes.includes(i.toString())) {
-            selectedPayloadType = i.toString();
-            break;
-          }
-        }
-      }
-
-      modifiedSdp = modifiedSdp
-        .replace(/m=audio.*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
-        .replace(/a=rtpmap:\d+ .*\r\n/g, '')
-        .replace(/a=fmtp:\d+ .*\r\n/g, '')
-        .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
-        .replace(/a=extmap:\d+ .*\r\n/g, '')
-        .replace(/a=mid:.*\r\n/g, '')
-        .replace(/a=msid:.*\r\n/g, '')
-        .replace(/a=ssrc:.*\r\n/g, '')
-        .replace(/a=ssrc-group:.*\r\n/g, '')
-        .replace(/a=rtcp-mux\r\n/g, '')
-        .replace(/a=rtcp-rsize\r\n/g, '')
-        .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
-        .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
-        .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
-        .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
-
-      modifiedSdp = modifiedSdp.replace(
-        /(m=audio.*\r\n)/,
-        `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
-      );
-    }
-
-    const modifiedAnswer = {
-      ...answer,
-      sdp: modifiedSdp
-    };
-
-    await pc.setLocalDescription(modifiedAnswer);
-    console.log('Local description set successfully');
-
-    // Send the answer
     socket.emit("answer-call", {
       toUserId: fromUserId,
       answer: pc.localDescription,
     });
-    console.log('Answer sent to caller');
 
     // Hide the notification
     document.getElementById("incomingCallNotification").style.display = "none";
     pendingCall = null;
     updateCallState();
-
-    // Clear the ICE connection timeout
-    clearTimeout(iceConnectionTimeout);
   } catch (error) {
     console.error("Error accepting call:", error);
     alert("Failed to accept call. Please try again.");
