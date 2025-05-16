@@ -13,11 +13,18 @@ let activeCallParticipants = new Set(); // Track active call participants
 // ICE Server configuration for better connectivity
 const iceServers = {
   iceServers: [
-    // TURN servers with TCP fallback (prioritize these for corporate networks)
+    // STUN servers
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // TURN servers with TCP fallback
     {
       urls: [
-        'turn:openrelay.metered.ca:443?transport=tcp',
-        'turn:openrelay.metered.ca:80?transport=tcp'
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
       ],
       username: 'openrelayproject',
       credential: 'openrelayproject',
@@ -25,8 +32,9 @@ const iceServers = {
     },
     {
       urls: [
-        'turn:numb.viagenie.ca:443?transport=tcp',
-        'turn:numb.viagenie.ca:80?transport=tcp'
+        'turn:numb.viagenie.ca',
+        'turn:numb.viagenie.ca:3478',
+        'turn:numb.viagenie.ca:3478?transport=tcp'
       ],
       username: 'webrtc@live.com',
       credential: 'muazkh',
@@ -50,13 +58,10 @@ const iceServers = {
       username: 'webrtc',
       credential: 'webrtc',
       credentialType: 'password'
-    },
-    // STUN servers (as fallback)
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    }
   ],
   iceCandidatePoolSize: 10,
-  iceTransportPolicy: 'relay', // Force TURN for corporate networks
+  iceTransportPolicy: 'all',
   bundlePolicy: 'max-bundle',
   rtcpMuxPolicy: 'require',
   iceServersPolicy: 'all'
@@ -315,7 +320,7 @@ function createPeerConnection(peerId) {
       iceGatheringTimeout = setTimeout(() => {
         console.log(`ICE gathering timeout for ${peerId}, forcing TURN usage`);
         forceTurnUsage();
-      }, 2000); // Reduced to 2 seconds for corporate networks
+      }, 5000); // 5 seconds timeout
     }
   };
 
@@ -332,7 +337,7 @@ function createPeerConnection(peerId) {
             console.log(`Connection establishment timeout for ${peerId}, forcing TURN usage`);
             forceTurnUsage();
           }
-        }, 2000); // Reduced to 2 seconds for corporate networks
+        }, 3000); // Reduced to 3 seconds to fail faster to TURN
         break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -353,7 +358,7 @@ function createPeerConnection(peerId) {
             console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
             forceTurnUsage();
           }
-        }, 1000); // Reduced to 1 second for corporate networks
+        }, 2000); // Reduced to 2 seconds to fail faster to TURN
         break;
       case 'connected':
         // Clear any pending timeouts
@@ -433,7 +438,8 @@ function createPeerConnection(peerId) {
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         console.log(`Attempting to recover connection with ${peerId} (attempt ${reconnectAttempts + 1})`);
         reconnectAttempts++;
-        forceTurnUsage();
+        // Force TURN usage by restarting ICE
+        pc.restartIce();
       } else {
         console.log(`Max reconnection attempts reached for ${peerId}`);
         clearInterval(connectionCheckInterval);
@@ -443,7 +449,7 @@ function createPeerConnection(peerId) {
       // Reset reconnect attempts on successful connection
       reconnectAttempts = 0;
     }
-  }, 3000); // Check every 3 seconds for corporate networks
+  }, 5000); // Check every 5 seconds
 
   // Store the interval ID for cleanup
   pc.connectionCheckInterval = connectionCheckInterval;
@@ -620,30 +626,145 @@ async function acceptCall() {
   
   try {
     const { fromUserId, offer } = pendingCall;
-    console.log(offer);
+    console.log('Accepting call from:', fromUserId);
     
     const pc = createPeerConnection(fromUserId);
     peers[fromUserId] = pc;
     activeCallParticipants.add(fromUserId);
 
+    // Set up ICE connection monitoring before setting remote description
+    let iceConnectionTimeout = setTimeout(() => {
+      if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
+        console.log('ICE connection timeout, forcing TURN usage');
+        forceTurnUsage();
+      }
+    }, 3000);
+
+    // Set up connection state monitoring
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection state with ${fromUserId}:`, pc.connectionState);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        console.log('Connection failed or disconnected, forcing TURN usage');
+        forceTurnUsage();
+      }
+    };
+
+    // Set up ICE connection state monitoring
+    pc.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state with ${fromUserId}:`, pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+        console.log('ICE connection failed or disconnected, forcing TURN usage');
+        forceTurnUsage();
+      }
+    };
+
+    // Set up ICE gathering state monitoring
+    pc.onicegatheringstatechange = () => {
+      console.log(`ICE gathering state with ${fromUserId}:`, pc.iceGatheringState);
+      if (pc.iceGatheringState === 'gathering') {
+        // Set a timeout for ICE gathering
+        setTimeout(() => {
+          if (pc.iceGatheringState === 'gathering') {
+            console.log('ICE gathering timeout, forcing TURN usage');
+            forceTurnUsage();
+          }
+        }, 3000);
+      }
+    };
+
+    // Set up ICE candidate handling
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('ICE candidate:', event.candidate);
+        // Check if this is a TURN candidate
+        if (event.candidate.candidate.indexOf('relay') !== -1) {
+          console.log('Using TURN server for connection');
+          usingTurn = true;
+        }
+        socket.emit("ice-candidate", {
+          toUserId: fromUserId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    // Set remote description first
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log('Remote description set successfully');
 
-    localStream.getTracks().forEach((track) =>
-      pc.addTrack(track, localStream)
-    );
+    // Add local stream tracks
+    localStream.getTracks().forEach((track) => {
+      pc.addTrack(track, localStream);
+    });
+    console.log('Local tracks added');
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    // Create and set local description
+    const answer = await pc.createAnswer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: false
+    });
 
+    // Modify the answer SDP to ensure proper codec configuration
+    let modifiedSdp = answer.sdp;
+    const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
+    if (audioMLineMatch) {
+      const audioMLine = audioMLineMatch[0];
+      const payloadTypes = audioMLine.split(' ').slice(3);
+      let selectedPayloadType = '0';
+      if (!payloadTypes.includes('0')) {
+        for (let i = 0; i < 96; i++) {
+          if (!payloadTypes.includes(i.toString())) {
+            selectedPayloadType = i.toString();
+            break;
+          }
+        }
+      }
+
+      modifiedSdp = modifiedSdp
+        .replace(/m=audio.*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
+        .replace(/a=rtpmap:\d+ .*\r\n/g, '')
+        .replace(/a=fmtp:\d+ .*\r\n/g, '')
+        .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
+        .replace(/a=extmap:\d+ .*\r\n/g, '')
+        .replace(/a=mid:.*\r\n/g, '')
+        .replace(/a=msid:.*\r\n/g, '')
+        .replace(/a=ssrc:.*\r\n/g, '')
+        .replace(/a=ssrc-group:.*\r\n/g, '')
+        .replace(/a=rtcp-mux\r\n/g, '')
+        .replace(/a=rtcp-rsize\r\n/g, '')
+        .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
+        .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
+        .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
+        .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
+
+      modifiedSdp = modifiedSdp.replace(
+        /(m=audio.*\r\n)/,
+        `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
+      );
+    }
+
+    const modifiedAnswer = {
+      ...answer,
+      sdp: modifiedSdp
+    };
+
+    await pc.setLocalDescription(modifiedAnswer);
+    console.log('Local description set successfully');
+
+    // Send the answer
     socket.emit("answer-call", {
       toUserId: fromUserId,
       answer: pc.localDescription,
     });
+    console.log('Answer sent to caller');
 
     // Hide the notification
     document.getElementById("incomingCallNotification").style.display = "none";
     pendingCall = null;
     updateCallState();
+
+    // Clear the ICE connection timeout
+    clearTimeout(iceConnectionTimeout);
   } catch (error) {
     console.error("Error accepting call:", error);
     alert("Failed to accept call. Please try again.");
