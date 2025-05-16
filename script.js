@@ -13,18 +13,11 @@ let activeCallParticipants = new Set(); // Track active call participants
 // ICE Server configuration for better connectivity
 const iceServers = {
   iceServers: [
-    // STUN servers
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    // TURN servers with TCP fallback
+    // TURN servers with TCP fallback (prioritize these for corporate networks)
     {
       urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp'
+        'turn:openrelay.metered.ca:443?transport=tcp',
+        'turn:openrelay.metered.ca:80?transport=tcp'
       ],
       username: 'openrelayproject',
       credential: 'openrelayproject',
@@ -32,9 +25,8 @@ const iceServers = {
     },
     {
       urls: [
-        'turn:numb.viagenie.ca',
-        'turn:numb.viagenie.ca:3478',
-        'turn:numb.viagenie.ca:3478?transport=tcp'
+        'turn:numb.viagenie.ca:443?transport=tcp',
+        'turn:numb.viagenie.ca:80?transport=tcp'
       ],
       username: 'webrtc@live.com',
       credential: 'muazkh',
@@ -58,10 +50,13 @@ const iceServers = {
       username: 'webrtc',
       credential: 'webrtc',
       credentialType: 'password'
-    }
+    },
+    // STUN servers (as fallback)
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
   ],
   iceCandidatePoolSize: 10,
-  iceTransportPolicy: 'all',
+  iceTransportPolicy: 'relay', // Force TURN for corporate networks
   bundlePolicy: 'max-bundle',
   rtcpMuxPolicy: 'require',
   iceServersPolicy: 'all'
@@ -139,6 +134,19 @@ function createPeerConnection(peerId) {
     rtcpMuxPolicy: 'require',
     iceTransportPolicy: 'all',
     iceCandidatePoolSize: 10
+  });
+
+  // Set codec preferences
+  pc.getTransceivers().forEach(transceiver => {
+    if (transceiver.sender.track && transceiver.sender.track.kind === 'audio') {
+      transceiver.setCodecPreferences([
+        {
+          mimeType: 'audio/PCM',
+          clockRate: 8000,
+          channels: 1
+        }
+      ]);
+    }
   });
 
   // Add reconnection attempt counter
@@ -307,7 +315,7 @@ function createPeerConnection(peerId) {
       iceGatheringTimeout = setTimeout(() => {
         console.log(`ICE gathering timeout for ${peerId}, forcing TURN usage`);
         forceTurnUsage();
-      }, 5000); // 5 seconds timeout
+      }, 2000); // Reduced to 2 seconds for corporate networks
     }
   };
 
@@ -324,7 +332,7 @@ function createPeerConnection(peerId) {
             console.log(`Connection establishment timeout for ${peerId}, forcing TURN usage`);
             forceTurnUsage();
           }
-        }, 3000); // Reduced to 3 seconds to fail faster to TURN
+        }, 2000); // Reduced to 2 seconds for corporate networks
         break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -345,7 +353,7 @@ function createPeerConnection(peerId) {
             console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
             forceTurnUsage();
           }
-        }, 2000); // Reduced to 2 seconds to fail faster to TURN
+        }, 1000); // Reduced to 1 second for corporate networks
         break;
       case 'connected':
         // Clear any pending timeouts
@@ -425,8 +433,7 @@ function createPeerConnection(peerId) {
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         console.log(`Attempting to recover connection with ${peerId} (attempt ${reconnectAttempts + 1})`);
         reconnectAttempts++;
-        // Force TURN usage by restarting ICE
-        pc.restartIce();
+        forceTurnUsage();
       } else {
         console.log(`Max reconnection attempts reached for ${peerId}`);
         clearInterval(connectionCheckInterval);
@@ -436,7 +443,7 @@ function createPeerConnection(peerId) {
       // Reset reconnect attempts on successful connection
       reconnectAttempts = 0;
     }
-  }, 5000); // Check every 5 seconds
+  }, 3000); // Check every 3 seconds for corporate networks
 
   // Store the interval ID for cleanup
   pc.connectionCheckInterval = connectionCheckInterval;
