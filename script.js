@@ -129,6 +129,20 @@ function createPeerConnection(peerId) {
   let connectionTimeout = null;
   let usingTurn = false;
 
+  // Function to force TURN usage
+  const forceTurnUsage = () => {
+    console.log(`Forcing TURN usage for ${peerId}`);
+    const turnOnlyConfig = {
+      ...iceServers,
+      iceTransportPolicy: 'relay', // Force TURN only
+      iceServers: iceServers.iceServers.filter(server => 
+        server.urls.some(url => url.startsWith('turn:'))
+      )
+    };
+    pc.setConfiguration(turnOnlyConfig);
+    pc.restartIce();
+  };
+
   // Add SDP modification to ensure G.711 codec and proper ICE handling
   pc.onnegotiationneeded = async () => {
     try {
@@ -211,9 +225,8 @@ function createPeerConnection(peerId) {
       // Set a timeout for ICE gathering
       iceGatheringTimeout = setTimeout(() => {
         console.log(`ICE gathering timeout for ${peerId}, forcing TURN usage`);
-        // Force TURN usage by restarting ICE
-        pc.restartIce();
-      }, 5000); // Reduced to 5 seconds to fail faster to TURN
+        forceTurnUsage();
+      }, 5000); // 5 seconds timeout
     }
   };
 
@@ -228,16 +241,15 @@ function createPeerConnection(peerId) {
         connectionTimeout = setTimeout(() => {
           if (pc.iceConnectionState === 'checking') {
             console.log(`Connection establishment timeout for ${peerId}, forcing TURN usage`);
-            pc.restartIce();
+            forceTurnUsage();
           }
-        }, 5000); // Reduced to 5 seconds to fail faster to TURN
+        }, 5000); // 5 seconds timeout
         break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
           reconnectAttempts++;
-          // Force TURN usage by restarting ICE
-          pc.restartIce();
+          forceTurnUsage();
         } else {
           console.log(`Max reconnection attempts reached for ${peerId}`);
           removeParticipant(peerId);
@@ -250,9 +262,9 @@ function createPeerConnection(peerId) {
         setTimeout(() => {
           if (pc.iceConnectionState === 'disconnected') {
             console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
-            pc.restartIce();
+            forceTurnUsage();
           }
-        }, 3000); // Reduced to 3 seconds to fail faster to TURN
+        }, 3000); // 3 seconds timeout
         break;
       case 'connected':
         // Clear any pending timeouts
