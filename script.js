@@ -13,12 +13,13 @@ let activeCallParticipants = new Set(); // Track active call participants
 // ICE Server configuration for better connectivity
 const iceServers = {
   iceServers: [
+    // STUN servers
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    // Add TURN servers as fallback
+    // TURN servers with TCP fallback
     {
       urls: [
         'turn:openrelay.metered.ca:80',
@@ -26,21 +27,25 @@ const iceServers = {
         'turn:openrelay.metered.ca:443?transport=tcp'
       ],
       username: 'openrelayproject',
-      credential: 'openrelayproject'
+      credential: 'openrelayproject',
+      credentialType: 'password'
     },
     {
       urls: [
         'turn:numb.viagenie.ca',
-        'turn:numb.viagenie.ca:3478'
+        'turn:numb.viagenie.ca:3478',
+        'turn:numb.viagenie.ca:3478?transport=tcp'
       ],
       username: 'webrtc@live.com',
-      credential: 'muazkh'
+      credential: 'muazkh',
+      credentialType: 'password'
     }
   ],
   iceCandidatePoolSize: 10,
   iceTransportPolicy: 'all',
   bundlePolicy: 'max-bundle',
-  rtcpMuxPolicy: 'require'
+  rtcpMuxPolicy: 'require',
+  iceServersPolicy: 'all'
 };
 
 // Connection status handling
@@ -123,7 +128,7 @@ function createPeerConnection(peerId) {
   let iceGatheringTimeout = null;
   let connectionTimeout = null;
 
-  // Add SDP modification to ensure G.711 codec
+  // Add SDP modification to ensure G.711 codec and proper ICE handling
   pc.onnegotiationneeded = async () => {
     try {
       const offer = await pc.createOffer({
@@ -138,7 +143,9 @@ function createPeerConnection(peerId) {
         .replace(/(a=rtpmap:.*\r\n)/g, '') // Remove other codecs
         .replace(/(a=fmtp:.*\r\n)/g, '') // Remove fmtp lines
         .replace(/(a=sendrecv)/g, 'a=sendonly') // Ensure proper direction
-        .replace(/(a=recvonly)/g, 'a=sendrecv'); // Ensure proper direction
+        .replace(/(a=recvonly)/g, 'a=sendrecv') // Ensure proper direction
+        .replace(/(a=ice-options:.*\r\n)/g, '$1a=ice-options:trickle\r\n') // Enable trickle ICE
+        .replace(/(a=setup:.*\r\n)/g, 'a=setup:actpass\r\n'); // Allow both active and passive roles
       
       const modifiedOffer = {
         ...offer,
@@ -173,11 +180,14 @@ function createPeerConnection(peerId) {
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      console.log('Sending ICE candidate to:', peerId);
-      socket.emit("ice-candidate", {
-        toUserId: peerId,
-        candidate: event.candidate,
-      });
+      console.log('Sending ICE candidate to:', peerId, event.candidate);
+      // Only send ICE candidates if they are not host candidates (to avoid local network issues)
+      if (event.candidate.candidate.indexOf('host') === -1) {
+        socket.emit("ice-candidate", {
+          toUserId: peerId,
+          candidate: event.candidate,
+        });
+      }
     } else {
       console.log('ICE gathering completed for:', peerId);
       if (iceGatheringTimeout) {
@@ -217,7 +227,7 @@ function createPeerConnection(peerId) {
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
           reconnectAttempts++;
-          // Try to restart ICE
+          // Try to restart ICE with TCP fallback
           pc.restartIce();
         } else {
           console.log(`Max reconnection attempts reached for ${peerId}`);
