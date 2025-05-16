@@ -154,15 +154,37 @@ function createPeerConnection(peerId) {
         iceRestart: true
       });
       
-      // Modify SDP to use G.711 and ensure proper audio track handling
-      const modifiedSdp = offer.sdp
-        .replace(/(m=audio.*\r\n)/g, '$1a=rtpmap:0 PCM/8000\r\n')
-        .replace(/(a=rtpmap:.*\r\n)/g, '') // Remove other codecs
-        .replace(/(a=fmtp:.*\r\n)/g, '') // Remove fmtp lines
-        .replace(/(a=sendrecv)/g, 'a=sendonly') // Ensure proper direction
-        .replace(/(a=recvonly)/g, 'a=sendrecv') // Ensure proper direction
-        .replace(/(a=ice-options:.*\r\n)/g, '$1a=ice-options:trickle\r\n') // Enable trickle ICE
-        .replace(/(a=setup:.*\r\n)/g, 'a=setup:actpass\r\n'); // Allow both active and passive roles
+      // Create a new SDP with proper codec configuration
+      let modifiedSdp = offer.sdp;
+      
+      // Find the audio m-line
+      const audioMLine = modifiedSdp.match(/m=audio.*\r\n/)[0];
+      
+      // Create new SDP with only PCM codec
+      modifiedSdp = modifiedSdp
+        .replace(/m=audio.*\r\n/, `${audioMLine}a=rtpmap:0 PCM/8000\r\n`)
+        .replace(/a=rtpmap:\d+ .*\r\n/g, '') // Remove all other codec mappings
+        .replace(/a=fmtp:\d+ .*\r\n/g, '') // Remove all fmtp lines
+        .replace(/a=rtcp-fb:\d+ .*\r\n/g, '') // Remove all rtcp-fb lines
+        .replace(/a=extmap:\d+ .*\r\n/g, '') // Remove all extmap lines
+        .replace(/a=mid:.*\r\n/g, '') // Remove all mid lines
+        .replace(/a=msid:.*\r\n/g, '') // Remove all msid lines
+        .replace(/a=ssrc:.*\r\n/g, '') // Remove all ssrc lines
+        .replace(/a=ssrc-group:.*\r\n/g, '') // Remove all ssrc-group lines
+        .replace(/a=rtcp-mux\r\n/g, '') // Remove rtcp-mux
+        .replace(/a=rtcp-rsize\r\n/g, '') // Remove rtcp-rsize
+        .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n') // Set setup to actpass
+        .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n') // Enable trickle ICE
+        .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n') // Set direction to sendonly
+        .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n'); // Set direction to sendrecv
+      
+      // Ensure we have the basic required SDP attributes
+      if (!modifiedSdp.includes('a=rtpmap:0 PCM/8000')) {
+        modifiedSdp = modifiedSdp.replace(
+          /(m=audio.*\r\n)/,
+          '$1a=rtpmap:0 PCM/8000\r\n'
+        );
+      }
       
       const modifiedOffer = {
         ...offer,
@@ -172,6 +194,12 @@ function createPeerConnection(peerId) {
       await pc.setLocalDescription(modifiedOffer);
     } catch (error) {
       console.error('Error during negotiation:', error);
+      // If setting local description fails, try with original offer
+      try {
+        await pc.setLocalDescription(offer);
+      } catch (retryError) {
+        console.error('Error setting original offer:', retryError);
+      }
     }
   };
 
