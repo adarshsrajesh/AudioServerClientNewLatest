@@ -132,7 +132,7 @@ function createPeerConnection(peerId) {
   let usingTurn = false;
 
   // Function to force TURN usage
-  const  forceTurnUsage = async () => {
+  const  forceTurnUsage = () => {
     console.log(`Forcing TURN usage for ${peerId}`);
     const turnOnlyConfig = {
       ...iceServers,
@@ -248,7 +248,7 @@ function createPeerConnection(peerId) {
   //   }
   // };
 
-  pc.onnegotiationneeded = async () => {
+pc.onnegotiationneeded = async () => {
   try {
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
@@ -265,22 +265,20 @@ function createPeerConnection(peerId) {
     }
 
     const audioMLine = audioMLineMatch[0];
-    const payloadTypes = audioMLine.split(' ').slice(3); // Get payload types
+    const selectedPayloadType = '0'; // PCMU
 
-    // We’ll use payload type 0 for PCMU
-    const selectedPayloadType = '0';
+    // Extract the original MID value
+    const midMatch = modifiedSdp.match(/a=mid:(\S+)\r\n/);
+    const mid = midMatch ? midMatch[1] : '0';
 
     // Clean and reconstruct SDP
     modifiedSdp = modifiedSdp
-      // Replace m-line to only include payload type 0
       .replace(/m=audio .*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
-      // Remove all codec-related attributes
       .replace(/a=rtpmap:\d+ .*\r\n/g, '')
       .replace(/a=fmtp:\d+ .*\r\n/g, '')
       .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
-      // Remove extensions and other unrelated lines
       .replace(/a=extmap:\d+ .*\r\n/g, '')
-      .replace(/a=mid:.*\r\n/g, '')
+      .replace(/a=mid:.*\r\n/g, '') // remove existing mid
       .replace(/a=msid:.*\r\n/g, '')
       .replace(/a=ssrc:.*\r\n/g, '')
       .replace(/a=ssrc-group:.*\r\n/g, '')
@@ -291,10 +289,11 @@ function createPeerConnection(peerId) {
       .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
       .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
 
-    // Add the correct rtpmap line for PCMU
+    // Add required lines: rtpmap and mid
     modifiedSdp = modifiedSdp.replace(
       /(m=audio.*\r\n)/,
-      `$1a=rtpmap:${selectedPayloadType} PCMU/8000\r\n`
+      `$1a=rtpmap:${selectedPayloadType} PCMU/8000\r\n` +
+      `a=mid:${mid}\r\n`
     );
 
     const modifiedOffer = {
@@ -401,10 +400,10 @@ function createPeerConnection(peerId) {
         // Don't immediately remove on disconnected state
         console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
         // Set a timeout for recovery
-        setTimeout(async () => {
+        setTimeout(() => {
           if (pc.iceConnectionState === 'disconnected') {
             console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
-            await forceTurnUsage();
+            forceTurnUsage();
           }
         }, 3000); // 3 seconds timeout
         break;
