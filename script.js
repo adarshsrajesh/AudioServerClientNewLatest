@@ -91,19 +91,23 @@ function createPeerConnection(peerId) {
     sdpSemantics: 'unified-plan',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
-    iceTransportPolicy: 'all'
+    iceTransportPolicy: 'all',
+    iceCandidatePoolSize: 10
   });
 
   // Add reconnection attempt counter
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 3;
+  let iceGatheringTimeout = null;
+  let connectionTimeout = null;
 
   // Add SDP modification to ensure G.711 codec
   pc.onnegotiationneeded = async () => {
     try {
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: false
+        offerToReceiveVideo: false,
+        iceRestart: true
       });
       
       // Modify SDP to use G.711 and ensure proper audio track handling
@@ -152,6 +156,23 @@ function createPeerConnection(peerId) {
         toUserId: peerId,
         candidate: event.candidate,
       });
+    } else {
+      console.log('ICE gathering completed for:', peerId);
+      if (iceGatheringTimeout) {
+        clearTimeout(iceGatheringTimeout);
+        iceGatheringTimeout = null;
+      }
+    }
+  };
+
+  pc.onicegatheringstatechange = () => {
+    console.log(`ICE gathering state for ${peerId}:`, pc.iceGatheringState);
+    if (pc.iceGatheringState === 'gathering') {
+      // Set a timeout for ICE gathering
+      iceGatheringTimeout = setTimeout(() => {
+        console.log(`ICE gathering timeout for ${peerId}, restarting ICE`);
+        pc.restartIce();
+      }, 10000); // 10 seconds timeout
     }
   };
 
@@ -160,6 +181,16 @@ function createPeerConnection(peerId) {
     
     // Handle ICE connection state changes
     switch (pc.iceConnectionState) {
+      case 'checking':
+        // Set a timeout for connection establishment
+        if (connectionTimeout) clearTimeout(connectionTimeout);
+        connectionTimeout = setTimeout(() => {
+          if (pc.iceConnectionState === 'checking') {
+            console.log(`Connection establishment timeout for ${peerId}, restarting ICE`);
+            pc.restartIce();
+          }
+        }, 15000); // 15 seconds timeout
+        break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
@@ -174,6 +205,26 @@ function createPeerConnection(peerId) {
       case 'disconnected':
         // Don't immediately remove on disconnected state
         console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
+        // Set a timeout for recovery
+        setTimeout(() => {
+          if (pc.iceConnectionState === 'disconnected') {
+            console.log(`Recovery timeout for ${peerId}, attempting to restart ICE`);
+            pc.restartIce();
+          }
+        }, 5000); // 5 seconds timeout for recovery
+        break;
+      case 'connected':
+        // Clear any pending timeouts
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout);
+          connectionTimeout = null;
+        }
+        if (iceGatheringTimeout) {
+          clearTimeout(iceGatheringTimeout);
+          iceGatheringTimeout = null;
+        }
+        // Reset reconnect attempts on successful connection
+        reconnectAttempts = 0;
         break;
       case 'closed':
         removeParticipant(peerId);
@@ -186,6 +237,16 @@ function createPeerConnection(peerId) {
     
     // Handle connection state changes
     switch (pc.connectionState) {
+      case 'connecting':
+        // Set a timeout for connection establishment
+        if (connectionTimeout) clearTimeout(connectionTimeout);
+        connectionTimeout = setTimeout(() => {
+          if (pc.connectionState === 'connecting') {
+            console.log(`Connection establishment timeout for ${peerId}, restarting ICE`);
+            pc.restartIce();
+          }
+        }, 15000); // 15 seconds timeout
+        break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
@@ -200,6 +261,22 @@ function createPeerConnection(peerId) {
       case 'disconnected':
         // Don't immediately remove on disconnected state
         console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
+        // Set a timeout for recovery
+        setTimeout(() => {
+          if (pc.connectionState === 'disconnected') {
+            console.log(`Recovery timeout for ${peerId}, attempting to restart ICE`);
+            pc.restartIce();
+          }
+        }, 5000); // 5 seconds timeout for recovery
+        break;
+      case 'connected':
+        // Clear any pending timeouts
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout);
+          connectionTimeout = null;
+        }
+        // Reset reconnect attempts on successful connection
+        reconnectAttempts = 0;
         break;
       case 'closed':
         removeParticipant(peerId);
@@ -227,15 +304,23 @@ function createPeerConnection(peerId) {
 
   // Store the interval ID for cleanup
   pc.connectionCheckInterval = connectionCheckInterval;
+  pc.connectionTimeout = connectionTimeout;
+  pc.iceGatheringTimeout = iceGatheringTimeout;
 
   return pc;
 }
 
 function removeParticipant(peerId) {
   if (peers[peerId]) {
-    // Clear the connection check interval
+    // Clear all timeouts and intervals
     if (peers[peerId].connectionCheckInterval) {
       clearInterval(peers[peerId].connectionCheckInterval);
+    }
+    if (peers[peerId].connectionTimeout) {
+      clearTimeout(peers[peerId].connectionTimeout);
+    }
+    if (peers[peerId].iceGatheringTimeout) {
+      clearTimeout(peers[peerId].iceGatheringTimeout);
     }
     
     peers[peerId].close();
