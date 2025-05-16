@@ -223,7 +223,7 @@ function createPeerConnection(peerId) {
       // Add PCM codec mapping with selected payload type
       modifiedSdp = modifiedSdp.replace(
         /(m=audio.*\r\n)/,
-        `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
+        `$1a=rtpmap:0 PCMU/8000\r\n`
       );
       
       const modifiedOffer = {
