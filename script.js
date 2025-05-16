@@ -98,7 +98,7 @@ async function setupLocalStream() {
         autoGainControl: true,
         channelCount: 1,
         sampleRate: 8000,
-        sampleSize: 16,
+        sampleSize: 16
         // codec: 'PCM'
       },
       video: false 
