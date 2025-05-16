@@ -39,25 +39,6 @@ const iceServers = {
       username: 'webrtc@live.com',
       credential: 'muazkh',
       credentialType: 'password'
-    },
-    // Additional TURN servers with TCP support
-    {
-      urls: [
-        'turn:turn.anyfirewall.com:443?transport=tcp',
-        'turn:turn.anyfirewall.com:80?transport=tcp'
-      ],
-      username: 'webrtc',
-      credential: 'webrtc',
-      credentialType: 'password'
-    },
-    {
-      urls: [
-        'turn:turn.dc2.anyfirewall.com:443?transport=tcp',
-        'turn:turn.dc2.anyfirewall.com:80?transport=tcp'
-      ],
-      username: 'webrtc',
-      credential: 'webrtc',
-      credentialType: 'password'
     }
   ],
   iceCandidatePoolSize: 10,
@@ -157,8 +138,7 @@ function createPeerConnection(peerId) {
       iceServers: iceServers.iceServers.filter(server => {
         // Handle both string and array URLs
         const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-        // Only keep TURN servers with TCP support
-        return urls.some(url => url.startsWith('turn:') && url.includes('transport=tcp'));
+        return urls.some(url => url.startsWith('turn:'));
       })
     };
     pc.setConfiguration(turnOnlyConfig);
@@ -324,7 +304,7 @@ function createPeerConnection(peerId) {
             console.log(`Connection establishment timeout for ${peerId}, forcing TURN usage`);
             forceTurnUsage();
           }
-        }, 3000); // Reduced to 3 seconds to fail faster to TURN
+        }, 5000); // 5 seconds timeout
         break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -345,7 +325,7 @@ function createPeerConnection(peerId) {
             console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
             forceTurnUsage();
           }
-        }, 2000); // Reduced to 2 seconds to fail faster to TURN
+        }, 3000); // 3 seconds timeout
         break;
       case 'connected':
         // Clear any pending timeouts
