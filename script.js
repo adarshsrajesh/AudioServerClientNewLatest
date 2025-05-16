@@ -157,34 +157,65 @@ function createPeerConnection(peerId) {
       // Create a new SDP with proper codec configuration
       let modifiedSdp = offer.sdp;
       
-      // Find the audio m-line
-      const audioMLine = modifiedSdp.match(/m=audio.*\r\n/)[0];
+      // Find the audio m-line and its payload types
+      const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
+      if (!audioMLineMatch) {
+        throw new Error('No audio m-line found in SDP');
+      }
+      
+      const audioMLine = audioMLineMatch[0];
+      const payloadTypes = audioMLine.split(' ').slice(3); // Get payload types from m-line
+      
+      // Find an available payload type (prefer 0 if available)
+      let selectedPayloadType = '0';
+      if (!payloadTypes.includes('0')) {
+        // Find first available payload type
+        for (let i = 0; i < 96; i++) {
+          if (!payloadTypes.includes(i.toString())) {
+            selectedPayloadType = i.toString();
+            break;
+          }
+        }
+      }
       
       // Create new SDP with only PCM codec
       modifiedSdp = modifiedSdp
-        .replace(/m=audio.*\r\n/, `${audioMLine}a=rtpmap:0 PCM/8000\r\n`)
-        .replace(/a=rtpmap:\d+ .*\r\n/g, '') // Remove all other codec mappings
-        .replace(/a=fmtp:\d+ .*\r\n/g, '') // Remove all fmtp lines
-        .replace(/a=rtcp-fb:\d+ .*\r\n/g, '') // Remove all rtcp-fb lines
-        .replace(/a=extmap:\d+ .*\r\n/g, '') // Remove all extmap lines
-        .replace(/a=mid:.*\r\n/g, '') // Remove all mid lines
-        .replace(/a=msid:.*\r\n/g, '') // Remove all msid lines
-        .replace(/a=ssrc:.*\r\n/g, '') // Remove all ssrc lines
-        .replace(/a=ssrc-group:.*\r\n/g, '') // Remove all ssrc-group lines
-        .replace(/a=rtcp-mux\r\n/g, '') // Remove rtcp-mux
-        .replace(/a=rtcp-rsize\r\n/g, '') // Remove rtcp-rsize
-        .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n') // Set setup to actpass
-        .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n') // Enable trickle ICE
-        .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n') // Set direction to sendonly
-        .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n'); // Set direction to sendrecv
+        // Replace m-line with single payload type
+        .replace(/m=audio.*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
+        // Remove all existing codec mappings
+        .replace(/a=rtpmap:\d+ .*\r\n/g, '')
+        // Remove all fmtp lines
+        .replace(/a=fmtp:\d+ .*\r\n/g, '')
+        // Remove all rtcp-fb lines
+        .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
+        // Remove all extmap lines
+        .replace(/a=extmap:\d+ .*\r\n/g, '')
+        // Remove all mid lines
+        .replace(/a=mid:.*\r\n/g, '')
+        // Remove all msid lines
+        .replace(/a=msid:.*\r\n/g, '')
+        // Remove all ssrc lines
+        .replace(/a=ssrc:.*\r\n/g, '')
+        // Remove all ssrc-group lines
+        .replace(/a=ssrc-group:.*\r\n/g, '')
+        // Remove rtcp-mux
+        .replace(/a=rtcp-mux\r\n/g, '')
+        // Remove rtcp-rsize
+        .replace(/a=rtcp-rsize\r\n/g, '')
+        // Set setup to actpass
+        .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
+        // Enable trickle ICE
+        .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
+        // Set direction to sendonly
+        .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
+        // Set direction to sendrecv
+        .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
       
-      // Ensure we have the basic required SDP attributes
-      if (!modifiedSdp.includes('a=rtpmap:0 PCM/8000')) {
-        modifiedSdp = modifiedSdp.replace(
-          /(m=audio.*\r\n)/,
-          '$1a=rtpmap:0 PCM/8000\r\n'
-        );
-      }
+      // Add PCM codec mapping with selected payload type
+      modifiedSdp = modifiedSdp.replace(
+        /(m=audio.*\r\n)/,
+        `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
+      );
       
       const modifiedOffer = {
         ...offer,
