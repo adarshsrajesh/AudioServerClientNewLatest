@@ -127,6 +127,7 @@ function createPeerConnection(peerId) {
   const MAX_RECONNECT_ATTEMPTS = 3;
   let iceGatheringTimeout = null;
   let connectionTimeout = null;
+  let usingTurn = false;
 
   // Add SDP modification to ensure G.711 codec and proper ICE handling
   pc.onnegotiationneeded = async () => {
@@ -180,7 +181,14 @@ function createPeerConnection(peerId) {
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      console.log('Sending ICE candidate to:', peerId, event.candidate);
+      console.log('ICE candidate:', event.candidate);
+      
+      // Check if this is a TURN candidate
+      if (event.candidate.candidate.indexOf('relay') !== -1) {
+        console.log('Using TURN server for connection');
+        usingTurn = true;
+      }
+
       // Only send ICE candidates if they are not host candidates (to avoid local network issues)
       if (event.candidate.candidate.indexOf('host') === -1) {
         socket.emit("ice-candidate", {
@@ -202,9 +210,10 @@ function createPeerConnection(peerId) {
     if (pc.iceGatheringState === 'gathering') {
       // Set a timeout for ICE gathering
       iceGatheringTimeout = setTimeout(() => {
-        console.log(`ICE gathering timeout for ${peerId}, restarting ICE`);
+        console.log(`ICE gathering timeout for ${peerId}, forcing TURN usage`);
+        // Force TURN usage by restarting ICE
         pc.restartIce();
-      }, 10000); // 10 seconds timeout
+      }, 5000); // Reduced to 5 seconds to fail faster to TURN
     }
   };
 
@@ -218,16 +227,16 @@ function createPeerConnection(peerId) {
         if (connectionTimeout) clearTimeout(connectionTimeout);
         connectionTimeout = setTimeout(() => {
           if (pc.iceConnectionState === 'checking') {
-            console.log(`Connection establishment timeout for ${peerId}, restarting ICE`);
+            console.log(`Connection establishment timeout for ${peerId}, forcing TURN usage`);
             pc.restartIce();
           }
-        }, 15000); // 15 seconds timeout
+        }, 5000); // Reduced to 5 seconds to fail faster to TURN
         break;
       case 'failed':
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
           reconnectAttempts++;
-          // Try to restart ICE with TCP fallback
+          // Force TURN usage by restarting ICE
           pc.restartIce();
         } else {
           console.log(`Max reconnection attempts reached for ${peerId}`);
@@ -240,10 +249,10 @@ function createPeerConnection(peerId) {
         // Set a timeout for recovery
         setTimeout(() => {
           if (pc.iceConnectionState === 'disconnected') {
-            console.log(`Recovery timeout for ${peerId}, attempting to restart ICE`);
+            console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
             pc.restartIce();
           }
-        }, 5000); // 5 seconds timeout for recovery
+        }, 3000); // Reduced to 3 seconds to fail faster to TURN
         break;
       case 'connected':
         // Clear any pending timeouts
@@ -257,6 +266,7 @@ function createPeerConnection(peerId) {
         }
         // Reset reconnect attempts on successful connection
         reconnectAttempts = 0;
+        console.log(`Connection established with ${peerId} using ${usingTurn ? 'TURN' : 'direct connection'}`);
         break;
       case 'closed':
         removeParticipant(peerId);
@@ -322,6 +332,7 @@ function createPeerConnection(peerId) {
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         console.log(`Attempting to recover connection with ${peerId} (attempt ${reconnectAttempts + 1})`);
         reconnectAttempts++;
+        // Force TURN usage by restarting ICE
         pc.restartIce();
       } else {
         console.log(`Max reconnection attempts reached for ${peerId}`);
