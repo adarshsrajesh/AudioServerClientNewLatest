@@ -94,6 +94,10 @@ function createPeerConnection(peerId) {
     iceTransportPolicy: 'all'
   });
 
+  // Add reconnection attempt counter
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT_ATTEMPTS = 3;
+
   // Add SDP modification to ensure G.711 codec
   pc.onnegotiationneeded = async () => {
     try {
@@ -153,23 +157,87 @@ function createPeerConnection(peerId) {
 
   pc.oniceconnectionstatechange = () => {
     console.log(`ICE connection state with ${peerId}:`, pc.iceConnectionState);
-    if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-      removeParticipant(peerId);
+    
+    // Handle ICE connection state changes
+    switch (pc.iceConnectionState) {
+      case 'failed':
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
+          reconnectAttempts++;
+          // Try to restart ICE
+          pc.restartIce();
+        } else {
+          console.log(`Max reconnection attempts reached for ${peerId}`);
+          removeParticipant(peerId);
+        }
+        break;
+      case 'disconnected':
+        // Don't immediately remove on disconnected state
+        console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
+        break;
+      case 'closed':
+        removeParticipant(peerId);
+        break;
     }
   };
 
   pc.onconnectionstatechange = () => {
     console.log(`Connection state with ${peerId}:`, pc.connectionState);
-    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-      removeParticipant(peerId);
+    
+    // Handle connection state changes
+    switch (pc.connectionState) {
+      case 'failed':
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
+          reconnectAttempts++;
+          // Try to restart ICE
+          pc.restartIce();
+        } else {
+          console.log(`Max reconnection attempts reached for ${peerId}`);
+          removeParticipant(peerId);
+        }
+        break;
+      case 'disconnected':
+        // Don't immediately remove on disconnected state
+        console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
+        break;
+      case 'closed':
+        removeParticipant(peerId);
+        break;
     }
   };
+
+  // Add connection recovery monitoring
+  let connectionCheckInterval = setInterval(() => {
+    if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        console.log(`Attempting to recover connection with ${peerId} (attempt ${reconnectAttempts + 1})`);
+        reconnectAttempts++;
+        pc.restartIce();
+      } else {
+        console.log(`Max reconnection attempts reached for ${peerId}`);
+        clearInterval(connectionCheckInterval);
+        removeParticipant(peerId);
+      }
+    } else if (pc.connectionState === 'connected' && pc.iceConnectionState === 'connected') {
+      // Reset reconnect attempts on successful connection
+      reconnectAttempts = 0;
+    }
+  }, 5000); // Check every 5 seconds
+
+  // Store the interval ID for cleanup
+  pc.connectionCheckInterval = connectionCheckInterval;
 
   return pc;
 }
 
 function removeParticipant(peerId) {
   if (peers[peerId]) {
+    // Clear the connection check interval
+    if (peers[peerId].connectionCheckInterval) {
+      clearInterval(peers[peerId].connectionCheckInterval);
+    }
+    
     peers[peerId].close();
     delete peers[peerId];
   }
