@@ -146,102 +146,102 @@ function createPeerConnection(peerId) {
   };
 
   // Add SDP modification to ensure G.711 codec and proper ICE handling
+//   pc.onnegotiationneeded = async () => {
+//   try {
+//     const offer = await pc.createOffer();
+//     await pc.setLocalDescription(offer);
+//     // Send offer to peer via signaling server
+//   } catch (error) {
+//     console.error("Negotiation error:", error);
+//   }
+// };
   pc.onnegotiationneeded = async () => {
-  try {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    // Send offer to peer via signaling server
-  } catch (error) {
-    console.error("Negotiation error:", error);
-  }
-};
-  // pc.onnegotiationneeded = async () => {
-  //   try {
-  //     const offer = await pc.createOffer({
-  //       offerToReceiveAudio: true,
-  //       offerToReceiveVideo: false,
-  //       iceRestart: true
-  //     });
+    try {
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+        iceRestart: true
+      });
       
-  //     // Create a new SDP with proper codec configuration
-  //     let modifiedSdp = offer.sdp;
+      // Create a new SDP with proper codec configuration
+      let modifiedSdp = offer.sdp;
       
   //     // Find the audio m-line and its payload types
-  //     const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
-  //     if (!audioMLineMatch) {
-  //       throw new Error('No audio m-line found in SDP');
-  //     }
+      const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
+      if (!audioMLineMatch) {
+        throw new Error('No audio m-line found in SDP');
+      }
       
-  //     const audioMLine = audioMLineMatch[0];
-  //     const payloadTypes = audioMLine.split(' ').slice(3); // Get payload types from m-line
+      const audioMLine = audioMLineMatch[0];
+      const payloadTypes = audioMLine.split(' ').slice(3); // Get payload types from m-line
       
-  //     // Find an available payload type (prefer 0 if available)
-  //     let selectedPayloadType = '0';
-  //     if (!payloadTypes.includes('0')) {
-  //       // Find first available payload type
-  //       for (let i = 0; i < 96; i++) {
-  //         if (!payloadTypes.includes(i.toString())) {
-  //           selectedPayloadType = i.toString();
-  //           break;
-  //         }
-  //       }
-  //     }
+      // Find an available payload type (prefer 0 if available)
+      let selectedPayloadType = '0';
+      if (!payloadTypes.includes('0')) {
+        // Find first available payload type
+        for (let i = 0; i < 96; i++) {
+          if (!payloadTypes.includes(i.toString())) {
+            selectedPayloadType = i.toString();
+            break;
+          }
+        }
+      }
       
-  //     // Create new SDP with only PCM codec
-  //     modifiedSdp = modifiedSdp
-  //       // Replace m-line with single payload type
-  //       .replace(/m=audio.*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
-  //       // Remove all existing codec mappings
-  //       .replace(/a=rtpmap:\d+ .*\r\n/g, '')
-  //       // Remove all fmtp lines
-  //       .replace(/a=fmtp:\d+ .*\r\n/g, '')
-  //       // Remove all rtcp-fb lines
-  //       .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
-  //       // Remove all extmap lines
-  //       .replace(/a=extmap:\d+ .*\r\n/g, '')
-  //       // Remove all mid lines
-  //       .replace(/a=mid:.*\r\n/g, '')
-  //       // Remove all msid lines
-  //       .replace(/a=msid:.*\r\n/g, '')
-  //       // Remove all ssrc lines
-  //       .replace(/a=ssrc:.*\r\n/g, '')
-  //       // Remove all ssrc-group lines
-  //       .replace(/a=ssrc-group:.*\r\n/g, '')
-  //       // Remove rtcp-mux
-  //       .replace(/a=rtcp-mux\r\n/g, '')
-  //       // Remove rtcp-rsize
-  //       .replace(/a=rtcp-rsize\r\n/g, '')
-  //       // Set setup to actpass
-  //       .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
-  //       // Enable trickle ICE
-  //       .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
-  //       // Set direction to sendonly
-  //       .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
-  //       // Set direction to sendrecv
-  //       .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
+      // Create new SDP with only PCM codec
+      modifiedSdp = modifiedSdp
+        // Replace m-line with single payload type
+        .replace(/m=audio.*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
+        // Remove all existing codec mappings
+        .replace(/a=rtpmap:\d+ .*\r\n/g, '')
+        // Remove all fmtp lines
+        .replace(/a=fmtp:\d+ .*\r\n/g, '')
+        // Remove all rtcp-fb lines
+        .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
+        // Remove all extmap lines
+        .replace(/a=extmap:\d+ .*\r\n/g, '')
+        // Remove all mid lines
+        .replace(/a=mid:.*\r\n/g, '')
+        // Remove all msid lines
+        .replace(/a=msid:.*\r\n/g, '')
+        // Remove all ssrc lines
+        .replace(/a=ssrc:.*\r\n/g, '')
+        // Remove all ssrc-group lines
+        .replace(/a=ssrc-group:.*\r\n/g, '')
+        // Remove rtcp-mux
+        .replace(/a=rtcp-mux\r\n/g, '')
+        // Remove rtcp-rsize
+        .replace(/a=rtcp-rsize\r\n/g, '')
+        // Set setup to actpass
+        .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
+        // Enable trickle ICE
+        .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
+        // Set direction to sendonly
+        .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
+        // Set direction to sendrecv
+        .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
       
-  //     // Add PCM codec mapping with selected payload type
-  //     modifiedSdp = modifiedSdp.replace(
-  //       /(m=audio.*\r\n)/,
-  //       `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
-  //     );
+      // Add PCM codec mapping with selected payload type
+      modifiedSdp = modifiedSdp.replace(
+        /(m=audio.*\r\n)/,
+        `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
+      );
       
-  //     const modifiedOffer = {
-  //       ...offer,
-  //       sdp: modifiedSdp
-  //     };
+      const modifiedOffer = {
+        ...offer,
+        sdp: modifiedSdp
+      };
       
-  //     await pc.setLocalDescription(modifiedOffer);
-  //   } catch (error) {
-  //     console.error('Error during negotiation:', error);
-  //     // If setting local description fails, try with original offer
-  //     try {
-  //       await pc.setLocalDescription(offer);
-  //     } catch (retryError) {
-  //       console.error('Error setting original offer:', retryError);
-  //     }
-  //   }
-  // };
+      await pc.setLocalDescription(modifiedOffer);
+    } catch (error) {
+      console.error('Error during negotiation:', error);
+      // If setting local description fails, try with original offer
+      try {
+        await pc.setLocalDescription(offer);
+      } catch (retryError) {
+        console.error('Error setting original offer:', retryError);
+      }
+    }
+  };
 
   pc.ontrack = (event) => {
     console.log('Received remote track from:', peerId);
