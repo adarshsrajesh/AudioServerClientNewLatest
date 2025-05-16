@@ -132,7 +132,7 @@ function createPeerConnection(peerId) {
   let usingTurn = false;
 
   // Function to force TURN usage
-  const forceTurnUsage = () => {
+  const  forceTurnUsage = async () => {
     console.log(`Forcing TURN usage for ${peerId}`);
     const turnOnlyConfig = {
       ...iceServers,
@@ -401,10 +401,10 @@ function createPeerConnection(peerId) {
         // Don't immediately remove on disconnected state
         console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
         // Set a timeout for recovery
-        setTimeout(() => {
+        setTimeout(async () => {
           if (pc.iceConnectionState === 'disconnected') {
             console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
-            forceTurnUsage();
+            await forceTurnUsage();
           }
         }, 3000); // 3 seconds timeout
         break;
