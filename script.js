@@ -21,17 +21,17 @@ async function getTurnConfig() {
 const ice =  getTurnConfig().then(servers => {
   console.log(servers);
   return servers;
-});
-//   return res.json(); 
+})
+  //   return res.json();
 
-// ICE Server configuration for better connectivity
-let iceServers={}
-// getTurnConfig().then(servers => {
-//   iceServers = { iceServers: ice };
-// // });
-iceServers = {iceServers: ice}; 
-// const iceServers = {
-//   iceServers: [
+  // ICE Server configuration for better connectivity
+  let iceServers = {};
+  // getTurnConfig().then(servers => {
+  //   iceServers = { iceServers: ice };
+  // // });
+  iceServers = { iceServers: ice };
+  // const iceServers = {
+    //   iceServers: [
 //     // STUN servers
 //     { urls: 'stun:stun.l.google.com:19302' },
 //     { urls: 'stun:stun1.l.google.com:19302' },
