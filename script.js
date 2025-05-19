@@ -11,25 +11,84 @@ let pendingInvite = null;
 let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
-  // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
-  const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
-  const data = res.json();
-  console.log(data)
-  return data.iceServers;
+  try {
+    const res = await fetch('https://new-audio-server.onrender.com/turn-credentials', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+      mode: 'cors'
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const data = await res.json(); // Add await here
+    console.log('TURN credentials received:', data);
+    return data;
+  } catch (error) {
+    console.warn('Failed to fetch TURN credentials:', error);
+    // Fallback to basic STUN configuration
+    return {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ]
+    };
+  }
 }
 
-const ice =  getTurnConfig().then(servers => {
-  console.log(servers);
-  return servers;
-})
+// Initialize ICE configuration properly
+let iceServers = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' } // Default STUN server while loading
+  ]
+};
+
+// Initialize ICE configuration asynchronously
+(async () => {
+  try {
+    const config = await getTurnConfig();
+    iceServers = {
+      iceServers: Array.isArray(config.iceServers) ? config.iceServers : [config.iceServers],
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
+    };
+    console.log('ICE configuration initialized:', iceServers);
+  } catch (error) {
+    console.error('Error initializing ICE configuration:', error);
+    // Keep using the default STUN configuration
+  }
+})();
+
+// Remove the problematic ice assignment
+// const ice = getTurnConfig().then(...) // Remove this line
+
+// async function getTurnConfig() {
+//   // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
+//   const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
+//   const data = res.json();
+//   console.log(data)
+//   return data.iceServers;
+// }
+
+// const ice =  getTurnConfig().then(servers => {
+//   console.log(servers);
+//   return servers;
+// })
   //   return res.json();
 
   // ICE Server configuration for better connectivity
-  let iceServers = {};
+  // let iceServers = {};
   // getTurnConfig().then(servers => {
   //   iceServers = { iceServers: ice };
   // // });
-  iceServers = { iceServers: ice };
+  // iceServers = { iceServers: ice };
   // const iceServers = {
     //   iceServers: [
 //     // STUN servers
