@@ -5,7 +5,7 @@
 // const { log } = require("console");
 
 // const socket = io("http://localhost:5000");
-const socket = io("https://new-audio-server.onrender.com");
+const socket = io("https://audioserver.onrender.com");
 
 const peers = {};
 let localStream;
@@ -14,57 +14,57 @@ let pendingCall = null;
 let pendingInvite = null;
 let activeCallParticipants = new Set(); // Track active call participants
 
-async function getTurnConfig() {
-  // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
-  const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
-  const data = res.json();
-  console.log(data)
-  return data.iceServers;
-}
+// async function getTurnConfig() {
+//   // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
+//   const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
+//   const data = res.json();
+//   console.log(data)
+//   return data.iceServers;
+// }
 
 // const ice = getTurnConfig()
 
 // ICE Server configuration for better connectivity
-const iceServers={}
-getTurnConfig().then(servers => {
-  iceServers = { iceServers: servers };
-});
-// const iceServers = {
-//   iceServers: [
-//     // STUN servers
-//     { urls: 'stun:stun.l.google.com:19302' },
-//     { urls: 'stun:stun1.l.google.com:19302' },
-//     { urls: 'stun:stun2.l.google.com:19302' },
-//     { urls: 'stun:stun3.l.google.com:19302' },
-//     { urls: 'stun:stun4.l.google.com:19302' },
-//     // TURN servers with TCP fallback
-//     {
-//       urls: [
-//         'turn:openrelay.metered.ca:80',
-//         'turn:openrelay.metered.ca:443',
-//         'turn:openrelay.metered.ca:443?transport=tcp'
-//       ],
-//       username: 'openrelayproject',
-//       credential: 'openrelayproject',
-//       credentialType: 'password'
-//     },
-//     {
-//       urls: [
-//         'turn:numb.viagenie.ca',
-//         'turn:numb.viagenie.ca:3478',
-//         'turn:numb.viagenie.ca:3478?transport=tcp'
-//       ],
-//       username: 'webrtc@live.com',
-//       credential: 'muazkh',
-//       credentialType: 'password'
-//     }
-//   ],
-//   iceCandidatePoolSize: 10,
-//   iceTransportPolicy: 'all',
-//   bundlePolicy: 'max-bundle',
-//   rtcpMuxPolicy: 'require',
-//   iceServersPolicy: 'all'
-// };
+// const iceServers={}
+// getTurnConfig().then(servers => {
+//   iceServers = { iceServers: servers };
+// });
+const iceServers = {
+  iceServers: [
+    // STUN servers
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // TURN servers with TCP fallback
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+      credentialType: 'password'
+    },
+    {
+      urls: [
+        'turn:numb.viagenie.ca',
+        'turn:numb.viagenie.ca:3478',
+        'turn:numb.viagenie.ca:3478?transport=tcp'
+      ],
+      username: 'webrtc@live.com',
+      credential: 'muazkh',
+      credentialType: 'password'
+    }
+  ],
+  iceCandidatePoolSize: 10,
+  iceTransportPolicy: 'all',
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
+  iceServersPolicy: 'all'
+};
 
 // Connection status handling
 socket.on('connect', () => {
