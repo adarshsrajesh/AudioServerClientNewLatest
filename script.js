@@ -2,7 +2,9 @@
 
 // const { log } = require("console");
 
-// const socket = io("http://192.168.137.69:5000");
+// const { log } = require("console");
+
+// const socket = io("http://localhost:5000");
 const socket = io("https://new-audio-server.onrender.com");
 
 const peers = {};
@@ -13,15 +15,20 @@ let pendingInvite = null;
 let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
-  const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
-  const data = await res.json();
+  // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
+  const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
+  const data = res.json();
+  console.log(data)
   return data.iceServers;
 }
 
-const ice = getTurnConfig()
+// const ice = getTurnConfig()
 
 // ICE Server configuration for better connectivity
-const iceServers={ iceServers:ice}
+const iceServers={}
+getTurnConfig().then(servers => {
+  iceServers = { iceServers: servers };
+});
 // const iceServers = {
 //   iceServers: [
 //     // STUN servers
