@@ -18,7 +18,7 @@ async function getTurnConfig() {
   return data.iceServers;
 }
 
-const ice = await getTurnConfig()
+const ice =  getTurnConfig()
 
 
 // ICE Server configuration for better connectivity
