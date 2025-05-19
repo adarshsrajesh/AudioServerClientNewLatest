@@ -18,8 +18,11 @@ async function getTurnConfig() {
   return data.iceServers;
 }
 
-const ice =  getTurnConfig()
-
+const ice =  getTurnConfig().then(servers => {
+  console.log(servers);
+  return servers;
+});
+//   return res.json(); 
 
 // ICE Server configuration for better connectivity
 let iceServers={}
