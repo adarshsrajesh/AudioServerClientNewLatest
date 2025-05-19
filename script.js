@@ -1,8 +1,4 @@
-// const { log } = require("console");
 
-// const { log } = require("console");
-
-// const { log } = require("console");
 
 // const socket = io("http://localhost:5000");
 const socket = io("https://new-audio-server.onrender.com");
@@ -15,46 +11,22 @@ let pendingInvite = null;
 let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
-  try {
-    const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    const data = await res.json(); // Add await here
-    console.log('TURN credentials:', data);
-    return data;
-  } catch (error) {
-    console.error('Error fetching TURN credentials:', error);
-    // Fallback to basic STUN servers if TURN fetch fails
-    return {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    };
-  }
+  // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
+  const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
+  const data = res.json();
+  console.log(data)
+  return data.iceServers;
 }
 
-// Fix the initialization of iceServers
-let iceServers = null;
+const ice = await getTurnConfig()
 
-// Initialize iceServers properly
-(async () => {
-  try {
-    const config = await getTurnConfig();
-    iceServers = { iceServers: config.iceServers || config };
-    console.log('ICE servers configured:', iceServers);
-  } catch (error) {
-    console.error('Error initializing ICE servers:', error);
-    // Set fallback configuration
-    iceServers = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    };
-  }
-})();
+
+// ICE Server configuration for better connectivity
+let iceServers={}
+// getTurnConfig().then(servers => {
+//   iceServers = { iceServers: ice };
+// // });
+iceServers = {iceServers: ice}; 
 // const iceServers = {
 //   iceServers: [
 //     // STUN servers
@@ -182,7 +154,7 @@ function createPeerConnection(peerId) {
       iceServers: iceServers.iceServers.filter(server => {
         // Handle both string and array URLs
         const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-        console.log(urls);
+        console.log(ur);
         
         return urls.some(url => url.startsWith('turn:'));
       })
