@@ -1,5 +1,5 @@
-const socket = io("http://localhost:5000");
-// const socket = io("https://new-audio-server.onrender.com");
+// const socket = io("http://localhost:5000");
+const socket = io("https://audio-server-new-latest.onrender.com");
 
 const peers = {};
 let localStream;
@@ -10,7 +10,7 @@ let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
   try {
-    const res = await fetch('http://localhost:5000/turn-credentials', {
+    const res = await fetch('https://audio-server-new-latest.onrender.comturn-credentials', {
       credentials: 'include'
     });
     const data = await res.json();
