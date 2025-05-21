@@ -10,7 +10,7 @@ let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
   try {
-    const res = await fetch('https://audio-server-new-latest.onrender.com/turn-credentials');
+    const res = await fetch('https://audio-server-new-latest.onrender.com/turn-credentials',{});
     const data = await res.json();
     console.log('TURN config:', data);
     return data.iceServers;
