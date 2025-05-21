@@ -1,7 +1,5 @@
-
-
-// const socket = io("http://localhost:5000");
-const socket = io("https://new-audio-server.onrender.com");
+const socket = io("http://localhost:5000");
+// const socket = io("https://new-audio-server.onrender.com");
 
 const peers = {};
 let localStream;
@@ -12,119 +10,37 @@ let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
   try {
-    const res = await fetch('https://new-audio-server.onrender.com/turn-credentials', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-      mode: 'cors'
+    const res = await fetch('http://localhost:5000/turn-credentials', {
+      credentials: 'include'
     });
-
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-
-    const data = await res.json(); // Add await here
-    console.log('TURN credentials received:', data);
-    return data;
+    const data = await res.json();
+    console.log('TURN config:', data);
+    return data.iceServers;
   } catch (error) {
-    console.warn('Failed to fetch TURN credentials:', error);
-    // Fallback to basic STUN configuration
-    return {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-      ]
-    };
+    console.error("Failed to get TURN servers:", error);
+    // Fallback to public STUN servers if TURN fails
+    return [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ];
   }
 }
 
-// Initialize ICE configuration properly
+// Initialize ICE servers
 let iceServers = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' } // Default STUN server while loading
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
   ]
 };
 
-// Initialize ICE configuration asynchronously
-(async () => {
-  try {
-    const config = await getTurnConfig();
-    iceServers = {
-      iceServers: Array.isArray(config.iceServers) ? config.iceServers : [config.iceServers],
-      iceCandidatePoolSize: 10,
-      iceTransportPolicy: 'all',
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require'
-    };
-    console.log('ICE configuration initialized:', iceServers);
-  } catch (error) {
-    console.error('Error initializing ICE configuration:', error);
-    // Keep using the default STUN configuration
-  }
-})();
-
-// Remove the problematic ice assignment
-// const ice = getTurnConfig().then(...) // Remove this line
-
-// async function getTurnConfig() {
-//   // const res = await fetch('https://new-audio-server.onrender.com/turn-credentials');
-//   const res  = await fetch('https://new-audio-server.onrender.com/turn-credentials')
-//   const data = res.json();
-//   console.log(data)
-//   return data.iceServers;
-// }
-
-// const ice =  getTurnConfig().then(servers => {
-//   console.log(servers);
-//   return servers;
-// })
-  //   return res.json();
-
-  // ICE Server configuration for better connectivity
-  // let iceServers = {};
-  // getTurnConfig().then(servers => {
-  //   iceServers = { iceServers: ice };
-  // // });
-  // iceServers = { iceServers: ice };
-  // const iceServers = {
-    //   iceServers: [
-//     // STUN servers
-//     { urls: 'stun:stun.l.google.com:19302' },
-//     { urls: 'stun:stun1.l.google.com:19302' },
-//     { urls: 'stun:stun2.l.google.com:19302' },
-//     { urls: 'stun:stun3.l.google.com:19302' },
-//     { urls: 'stun:stun4.l.google.com:19302' },
-//     // TURN servers with TCP fallback
-//     {
-//       urls: [
-//         'turn:openrelay.metered.ca:80',
-//         'turn:openrelay.metered.ca:443',
-//         'turn:openrelay.metered.ca:443?transport=tcp'
-//       ],
-//       username: 'openrelayproject',
-//       credential: 'openrelayproject',
-//       credentialType: 'password'
-//     },
-//     {
-//       urls: [
-//         'turn:numb.viagenie.ca',
-//         'turn:numb.viagenie.ca:3478',
-//         'turn:numb.viagenie.ca:3478?transport=tcp'
-//       ],
-//       username: 'webrtc@live.com',
-//       credential: 'muazkh',
-//       credentialType: 'password'
-//     }
-//   ],
-//   iceCandidatePoolSize: 10,
-//   iceTransportPolicy: 'all',
-//   bundlePolicy: 'max-bundle',
-//   rtcpMuxPolicy: 'require',
-//   iceServersPolicy: 'all'
-// };
+// Update ICE servers with TURN configuration
+getTurnConfig().then(servers => {
+  iceServers = { iceServers: servers };
+  console.log('Updated ICE servers:', iceServers);
+}).catch(error => {
+  console.error("Failed to update ICE servers:", error);
+});
 
 // Connection status handling
 socket.on('connect', () => {
@@ -205,379 +121,68 @@ function createPeerConnection(peerId) {
   const MAX_RECONNECT_ATTEMPTS = 3;
   let iceGatheringTimeout = null;
   let connectionTimeout = null;
-  let usingTurn = false;
 
-  // Function to force TURN usage
-  const  forceTurnUsage = () => {
-    console.log(`Forcing TURN usage for ${peerId}`);
-    const turnOnlyConfig = {
-      ...iceServers,
-      iceTransportPolicy: 'relay', // Force TURN only
-      iceServers: iceServers.iceServers.filter(server => {
-        // Handle both string and array URLs
-        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-        console.log(ur);
-        
-        return urls.some(url => url.startsWith('turn:'));
-      })
-    };
-    pc.setConfiguration(turnOnlyConfig);
-    pc.restartIce();
-  };
- // Add SDP modification to ensure G.711 codec and proper ICE handling
-//   pc.onnegotiationneeded = async () => {
-//   try {
-//     const offer = await pc.createOffer();
-//     await pc.setLocalDescription(offer);
-//     // Send offer to peer via signaling server
-//   } catch (error) {
-//     console.error("Negotiation error:", error);
-//   }
-// };
-
-// error
-
-  // pc.onnegotiationneeded = async () => {
-  //   try {
-  //     const offer = await pc.createOffer({
-  //       offerToReceiveAudio: true,
-  //       offerToReceiveVideo: false,
-  //       iceRestart: true
-  //     });
-      
-  //     // Create a new SDP with proper codec configuration
-  //     let modifiedSdp = offer.sdp;
-      
-  // //     // Find the audio m-line and its payload types
-  //     const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
-  //     if (!audioMLineMatch) {
-  //       throw new Error('No audio m-line found in SDP');
-  //     }
-      
-  //     const audioMLine = audioMLineMatch[0];
-  //     const payloadTypes = audioMLine.split(' ').slice(3); // Get payload types from m-line
-      
-  //     // Find an available payload type (prefer 0 if available)
-  //     let selectedPayloadType = '0';
-  //     if (!payloadTypes.includes('0')) {
-  //       // Find first available payload type
-  //       for (let i = 0; i < 96; i++) {
-  //         if (!payloadTypes.includes(i.toString())) {
-  //           selectedPayloadType = i.toString();
-  //           break;
-  //         }
-  //       }
-  //     }
-      
-  //     // Create new SDP with only PCM codec
-  //     modifiedSdp = modifiedSdp
-  //       // Replace m-line with single payload type
-  //       .replace(/m=audio.*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
-  //       // Remove all existing codec mappings
-  //       .replace(/a=rtpmap:\d+ .*\r\n/g, '')
-  //       // Remove all fmtp lines
-  //       .replace(/a=fmtp:\d+ .*\r\n/g, '')
-  //       // Remove all rtcp-fb lines
-  //       .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
-  //       // Remove all extmap lines
-  //       .replace(/a=extmap:\d+ .*\r\n/g, '')
-  //       // Remove all mid lines
-  //       .replace(/a=mid:.*\r\n/g, '')
-  //       // Remove all msid lines
-  //       .replace(/a=msid:.*\r\n/g, '')
-  //       // Remove all ssrc lines
-  //       .replace(/a=ssrc:.*\r\n/g, '')
-  //       // Remove all ssrc-group lines
-  //       .replace(/a=ssrc-group:.*\r\n/g, '')
-  //       // Remove rtcp-mux
-  //       .replace(/a=rtcp-mux\r\n/g, '')
-  //       // Remove rtcp-rsize
-  //       .replace(/a=rtcp-rsize\r\n/g, '')
-  //       // Set setup to actpass
-  //       .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
-  //       // Enable trickle ICE
-  //       .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
-  //       // Set direction to sendonly
-  //       .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
-  //       // Set direction to sendrecv
-  //       .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
-      
-  //     // Add PCM codec mapping with selected payload type
-  //     modifiedSdp = modifiedSdp.replace(
-  //       /(m=audio.*\r\n)/,
-  //       `$1a=rtpmap:${selectedPayloadType} PCM/8000\r\n`
-  //     );
-      
-  //     const modifiedOffer = {
-  //       ...offer,
-  //       sdp: modifiedSdp
-  //     };
-      
-  //     await pc.setLocalDescription(modifiedOffer);
-  //   } catch (error) {
-  //     console.error('Error during negotiation:', error);
-  //     // If setting local description fails, try with original offer
-  //     try {
-  //       await pc.setLocalDescription(offer);
-  //     } catch (retryError) {
-  //       console.error('Error setting original offer:', retryError);
-  //     }
-  //   }
-  // };
-
-pc.onnegotiationneeded = async () => {
-  try {
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: false,
-      iceRestart: true
-    });
-
-    let modifiedSdp = offer.sdp;
-
-    // Find the audio m-line
-    const audioMLineMatch = modifiedSdp.match(/m=audio.*\r\n/);
-    if (!audioMLineMatch) {
-      throw new Error('No audio m-line found in SDP');
-    }
-
-    const selectedPayloadType = '0'; // PCMU
-    const midMatch = modifiedSdp.match(/a=mid:(\S+)\r\n/);
-    const mid = midMatch ? midMatch[1] : '0';
-
-    modifiedSdp = modifiedSdp
-      .replace(/m=audio .*\r\n/, `m=audio 9 UDP/TLS/RTP/SAVPF ${selectedPayloadType}\r\n`)
-      .replace(/a=rtpmap:\d+ .*\r\n/g, '')
-      .replace(/a=fmtp:\d+ .*\r\n/g, '')
-      .replace(/a=rtcp-fb:\d+ .*\r\n/g, '')
-      .replace(/a=extmap:\d+ .*\r\n/g, '')
-      .replace(/a=mid:.*\r\n/g, '')
-      .replace(/a=msid:.*\r\n/g, '')
-      .replace(/a=ssrc:.*\r\n/g, '')
-      .replace(/a=ssrc-group:.*\r\n/g, '')
-      // KEEP a=rtcp-mux or you'll break BUNDLE
-      // .replace(/a=rtcp-mux\r\n/g, '')
-      .replace(/a=rtcp-rsize\r\n/g, '')
-      .replace(/a=setup:.*\r\n/g, 'a=setup:actpass\r\n')
-      .replace(/a=ice-options:.*\r\n/g, 'a=ice-options:trickle\r\n')
-      .replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n')
-      .replace(/a=recvonly\r\n/g, 'a=sendrecv\r\n');
-
-    // Re-insert required lines
-    modifiedSdp = modifiedSdp.replace(
-      /(m=audio.*\r\n)/,
-      `$1a=rtpmap:${selectedPayloadType} PCMU/8000\r\n` +
-      `a=mid:${mid}\r\n`
-    );
-
-    const modifiedOffer = {
-      type: offer.type,
-      sdp: modifiedSdp
-    };
-
-    await pc.setLocalDescription(modifiedOffer);
-  } catch (error) {
-    console.error('Error during negotiation:', error);
-    try {
-      await pc.setLocalDescription(offer);
-    } catch (retryError) {
-      console.error('Error setting original offer:', retryError);
-    }
-  }
-};
-
-
-  pc.ontrack = (event) => {
-    console.log('Received remote track from:', peerId);
-    const remoteAudio = document.createElement("audio");
-    remoteAudio.autoplay = true;
-    remoteAudio.playsinline = true;
-    remoteAudio.srcObject = event.streams[0];
-    remoteAudio.id = `audio-${peerId}`;
-    document.getElementById("remoteAudios").appendChild(remoteAudio);
-    
-    // Initialize DTMF sender when track is received
-    const audioSender = pc.getSenders().find(sender => 
-      sender.track && sender.track.kind === 'audio'
-    );
-    if (audioSender?.dtmf) {
-      dtmfSenders.set(peerId, audioSender.dtmf);
-    }
-    
-    updateActiveStreams();
-  };
-
+  // Handle ICE candidates
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      console.log('ICE candidate:', event.candidate);
-      
-      // Check if this is a TURN candidate
-      if (event.candidate.candidate.indexOf('relay') !== -1) {
-        console.log('Using TURN server for connection');
-        usingTurn = true;
-      }
-
-      // Only send ICE candidates if they are not host candidates (to avoid local network issues)
-      if (event.candidate.candidate.indexOf('host') === -1) {
-        socket.emit("ice-candidate", {
-          toUserId: peerId,
-          candidate: event.candidate,
-        });
-      }
-    } else {
-      console.log('ICE gathering completed for:', peerId);
-      if (iceGatheringTimeout) {
-        clearTimeout(iceGatheringTimeout);
-        iceGatheringTimeout = null;
-      }
+      console.log('New ICE candidate:', event.candidate);
+      socket.emit('ice-candidate', {
+        toUserId: peerId,
+        candidate: {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex
+        }
+      });
     }
   };
 
-  pc.onicegatheringstatechange = () => {
-    console.log(`ICE gathering state for ${peerId}:`, pc.iceGatheringState);
-    if (pc.iceGatheringState === 'gathering') {
-      // Set a timeout for ICE gathering
-      iceGatheringTimeout = setTimeout(() => {
-        console.log(`ICE gathering timeout for ${peerId}, forcing TURN usage`);
-        forceTurnUsage();
-      }, 5000); // 5 seconds timeout
-    }
-  };
-
+  // Handle ICE connection state changes
   pc.oniceconnectionstatechange = () => {
-    console.log(`ICE connection state with ${peerId}:`, pc.iceConnectionState);
+    console.log(`ICE connection state for ${peerId}:`, pc.iceConnectionState);
     
-    // Handle ICE connection state changes
-    switch (pc.iceConnectionState) {
-      case 'checking':
-        // Set a timeout for connection establishment
-        if (connectionTimeout) clearTimeout(connectionTimeout);
-        connectionTimeout = setTimeout(() => {
-          if (pc.iceConnectionState === 'checking') {
-            console.log(`Connection establishment timeout for ${peerId}, forcing TURN usage`);
-            forceTurnUsage();
-          }
-        }, 5000); // 5 seconds timeout
-        break;
-      case 'failed':
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
-          reconnectAttempts++;
-          forceTurnUsage();
-        } else {
-          console.log(`Max reconnection attempts reached for ${peerId}`);
-          removeParticipant(peerId);
-        }
-        break;
-      case 'disconnected':
-        // Don't immediately remove on disconnected state
-        console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
-        // Set a timeout for recovery
-        setTimeout(() => {
-          if (pc.iceConnectionState === 'disconnected') {
-            console.log(`Recovery timeout for ${peerId}, forcing TURN usage`);
-            forceTurnUsage();
-          }
-        }, 3000); // 3 seconds timeout
-        break;
-      case 'connected':
-        console.log(`Connection established with ${peerId}`);
-        // Clear any pending timeouts
-        if (connectionTimeout) {
-          clearTimeout(connectionTimeout);
-          connectionTimeout = null;
-        }
-        if (iceGatheringTimeout) {
-          clearTimeout(iceGatheringTimeout);
-          iceGatheringTimeout = null;
-        }
-        // Reset reconnect attempts on successful connection
-        reconnectAttempts = 0;
-        console.log(`Connection established with ${peerId} using ${usingTurn ? 'TURN' : 'direct connection'}`);
-        break;
-      case 'closed':
-        removeParticipant(peerId);
-        break;
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    console.log(`Connection state with ${peerId}:`, pc.connectionState);
-    
-    // Handle connection state changes
-    switch (pc.connectionState) {
-      case 'connecting':
-        // Set a timeout for connection establishment
-        if (connectionTimeout) clearTimeout(connectionTimeout);
-        connectionTimeout = setTimeout(() => {
-          if (pc.connectionState === 'connecting') {
-            console.log(`Connection establishment timeout for ${peerId}, restarting ICE`);
-            pc.restartIce();
-          }
-        }, 15000); // 15 seconds timeout
-        break;
-      case 'failed':
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          console.log(`Attempting to reconnect with ${peerId} (attempt ${reconnectAttempts + 1})`);
-          reconnectAttempts++;
-          // Try to restart ICE
-          pc.restartIce();
-        } else {
-          console.log(`Max reconnection attempts reached for ${peerId}`);
-          removeParticipant(peerId);
-        }
-        break;
-      case 'disconnected':
-        // Don't immediately remove on disconnected state
-        console.log(`Connection with ${peerId} is disconnected, waiting for recovery...`);
-        // Set a timeout for recovery
-        setTimeout(() => {
-          if (pc.connectionState === 'disconnected') {
-            console.log(`Recovery timeout for ${peerId}, attempting to restart ICE`);
-            pc.restartIce();
-          }
-        }, 5000); // 5 seconds timeout for recovery
-        break;
-      case 'connected':
-        // Clear any pending timeouts
-        if (connectionTimeout) {
-          clearTimeout(connectionTimeout);
-          connectionTimeout = null;
-        }
-        // Reset reconnect attempts on successful connection
-        reconnectAttempts = 0;
-        break;
-      case 'closed':
-        removeParticipant(peerId);
-        break;
-    }
-  };
-
-  // Add connection recovery monitoring
-  let connectionCheckInterval = setInterval(() => {
-    if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
+    if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        console.log(`Attempting to recover connection with ${peerId} (attempt ${reconnectAttempts + 1})`);
+        console.log(`Attempting to reconnect to ${peerId} (attempt ${reconnectAttempts + 1})`);
         reconnectAttempts++;
-        // Force TURN usage by restarting ICE
         pc.restartIce();
       } else {
         console.log(`Max reconnection attempts reached for ${peerId}`);
-        clearInterval(connectionCheckInterval);
-        removeParticipant(peerId);
+        cleanupPeerConnection(peerId);
       }
-    } else if (pc.connectionState === 'connected' && pc.iceConnectionState === 'connected') {
-      // Reset reconnect attempts on successful connection
+    } else if (pc.iceConnectionState === 'connected') {
+      console.log(`Successfully connected to ${peerId}`);
       reconnectAttempts = 0;
     }
-  }, 5000); // Check every 5 seconds
+  };
 
-  // Store the interval ID for cleanup
-  pc.connectionCheckInterval = connectionCheckInterval;
-  pc.connectionTimeout = connectionTimeout;
-  pc.iceGatheringTimeout = iceGatheringTimeout;
+  // Handle connection state changes
+  pc.onconnectionstatechange = () => {
+    console.log(`Connection state for ${peerId}:`, pc.connectionState);
+    if (pc.connectionState === 'failed') {
+      cleanupPeerConnection(peerId);
+    }
+  };
+
+  // Handle incoming tracks
+  pc.ontrack = (event) => {
+    console.log('Received remote track:', event.track.kind);
+    const remoteAudio = document.getElementById('remoteAudio');
+    if (remoteAudio && event.streams[0]) {
+      remoteAudio.srcObject = event.streams[0];
+    }
+  };
 
   return pc;
+}
+
+// Helper function to cleanup peer connection
+function cleanupPeerConnection(peerId) {
+  if (peers[peerId]) {
+    peers[peerId].close();
+    delete peers[peerId];
+    console.log(`Cleaned up peer connection for ${peerId}`);
+  }
 }
 
 function removeParticipant(peerId) {
@@ -624,9 +229,11 @@ async function startCall(toUser) {
     activeCallParticipants.add(toUser);
 
     // Add local stream tracks
-    localStream.getTracks().forEach((track) => {
-      pc.addTrack(track, localStream);
-    });
+    if (localStream) {
+      localStream.getTracks().forEach((track) => {
+        pc.addTrack(track, localStream);
+      });
+    }
 
     // Create and set local description
     const offer = await pc.createOffer({
@@ -817,8 +424,18 @@ socket.on("call-rejected", ({ fromUserId }) => {
   removeParticipant(fromUserId);
 });
 
-socket.on("ice-candidate", ({ fromUserId, candidate }) => {
-  peers[fromUserId]?.addIceCandidate(new RTCIceCandidate(candidate));
+socket.on("ice-candidate", async ({ fromUserId, candidate }) => {
+  try {
+    if (!peers[fromUserId]) {
+      console.warn(`Received ICE candidate for unknown peer: ${fromUserId}`);
+      return;
+    }
+    
+    console.log('Received ICE candidate from:', fromUserId, candidate);
+    await peers[fromUserId].addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (error) {
+    console.error('Error adding ICE candidate:', error);
+  }
 });
 
 socket.on("join-call", async ({ joiningUserId }) => {
