@@ -10,7 +10,7 @@ let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
   try {
-    const res = await fetch('https://audio-server-new-latest.onrender.comturn-credentials', {
+    const res = await fetch('https://audio-server-new-latest.onrender.com/turn-credentials', {
       credentials: 'include'
     });
     const data = await res.json();
