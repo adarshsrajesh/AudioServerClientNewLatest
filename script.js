@@ -10,7 +10,9 @@ let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
   try {
-    const res = await fetch('https://audio-server-new-latest.onrender.com/turn-credentials');
+    const res = await fetch('https://audio-server-new-latest.onrender.com/turn-credentials', {
+      credentials: 'include'
+    });
     const data = await res.json();
     console.log('TURN config:', data);
     return data.iceServers;
@@ -34,7 +36,7 @@ let iceServers = {
 
 // Update ICE servers with TURN configuration
 getTurnConfig().then(servers => {
-  iceServers = servers;
+  iceServers = { iceServers: servers };
   console.log('Updated ICE servers:', iceServers);
 }).catch(error => {
   console.error("Failed to update ICE servers:", error);
@@ -750,7 +752,7 @@ function updateDialPad() {
       <button class="dial-btn" onclick="sendDTMF('7')">7</button>
       <button class="dial-btn" onclick="sendDTMF('8')">8</button>
       <button class="dial-btn" onclick="sendDTMF('9')">9</button>
-      <button class="dial-btn" onclick="sendDTMF('*')">*</button>
+      <button class="dial-btn" onclick="sendDTMF('')"></button>
       <button class="dial-btn" onclick="sendDTMF('0')">0</button>
       <button class="dial-btn" onclick="sendDTMF('#')">#</button>
     </div>
@@ -776,4 +778,14 @@ socket.on("user-left", (username) => {
 socket.on("error", (error) => {
   console.error("Socket error:", error);
   alert(error);
+});
+
+// Add this pattern to all socket event handlers
+socket.on("event-name", (data) => {
+  try {
+    // handler code
+  } catch (error) {
+    console.error("Error in event-name handler:", error);
+    alert("An error occurred. Please try again.");
+  }
 });
