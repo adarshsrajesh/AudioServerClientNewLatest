@@ -34,7 +34,7 @@ let iceServers = {
 
 // Update ICE servers with TURN configuration
 getTurnConfig().then(servers => {
-  iceServers = { iceServers: servers };
+  iceServers = servers;
   console.log('Updated ICE servers:', iceServers);
 }).catch(error => {
   console.error("Failed to update ICE servers:", error);
