@@ -106,7 +106,17 @@ async function setupLocalStream() {
   }
 }
 
-function createPeerConnection(peerId) {
+async function createPeerConnection(peerId) {
+  // Ensure we have the latest ICE servers configuration
+  try {
+    const servers = await getTurnConfig();
+    iceServers = { iceServers: servers };
+    console.log('Using ICE servers:', iceServers);
+  } catch (error) {
+    console.warn('Using fallback ICE servers due to error:', error);
+    // Keep existing fallback configuration
+  }
+
   const pc = new RTCPeerConnection({
     ...iceServers,
     sdpSemantics: 'unified-plan',
@@ -224,7 +234,7 @@ async function startCall(toUser) {
   }
 
   try {
-    const pc = createPeerConnection(toUser);
+    const pc = await createPeerConnection(toUser);
     peers[toUser] = pc;
     activeCallParticipants.add(toUser);
 
@@ -356,7 +366,7 @@ async function acceptCall() {
     const { fromUserId, offer } = pendingCall;
     console.log(offer);
     
-    const pc = createPeerConnection(fromUserId);
+    const pc = await createPeerConnection(fromUserId);
     peers[fromUserId] = pc;
     activeCallParticipants.add(fromUserId);
 
@@ -474,7 +484,7 @@ async function acceptInvite() {
     for (const participant of activeCallParticipants) {
       if (participant !== myUsername) {
         console.log(`Creating connection with existing participant: ${participant}`);
-        const pc = createPeerConnection(participant);
+        const pc = await createPeerConnection(participant);
         peers[participant] = pc;
 
         localStream.getTracks().forEach((track) =>
@@ -493,7 +503,7 @@ async function acceptInvite() {
 
     // Create connection with the inviter
     console.log(`Creating connection with inviter: ${fromUserId}`);
-    const pc = createPeerConnection(fromUserId);
+    const pc = await createPeerConnection(fromUserId);
     peers[fromUserId] = pc;
     activeCallParticipants.add(fromUserId);
 
@@ -774,18 +784,4 @@ socket.on("user-left", (username) => {
   socket.emit("get-online-users");
 });
 
-// Add error handler for socket events
-socket.on("error", (error) => {
-  console.error("Socket error:", error);
-  alert(error);
-});
-
-// Add this pattern to all socket event handlers
-socket.on("event-name", (data) => {
-  try {
-    // handler code
-  } catch (error) {
-    console.error("Error in event-name handler:", error);
-    alert("An error occurred. Please try again.");
-  }
-});
+// Initialize the app
