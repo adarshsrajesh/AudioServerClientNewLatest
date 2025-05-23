@@ -10,23 +10,41 @@ let activeCallParticipants = new Set(); // Track active call participants
 
 async function getTurnConfig() {
   try {
+    console.log('Fetching TURN credentials...');
     const res = await fetch('https://audio-server-new-latest.onrender.com/turn-credentials', {
-      credentials: 'include'
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json'
+      }
     });
+    
+    if (!res.ok) {
+      const errorData = await res.json();
+      // Error message formatting
+      throw new Error(`Server responded with ${res.status}: ${errorData.error} - ${errorData.details || ''}`);
+    }
+    
     const data = await res.json();
-    console.log('TURN config:', data);
+    console.log('TURN config received:', data);
+    
+    if (!data.iceServers || !Array.isArray(data.iceServers)) {
+      throw new Error('Invalid TURN config format received');
+    }
+    
     return data.iceServers;
   } catch (error) {
     console.error("Failed to get TURN servers:", error);
     // Fallback to public STUN servers if TURN fails
-    return [
+    const fallbackServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' }
     ];
+    console.log('Using fallback STUN servers:', fallbackServers);
+    return fallbackServers;
   }
 }
 
-// Initialize ICE servers
+// Initialize ICE servers with STUN only initially
 let iceServers = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -37,9 +55,10 @@ let iceServers = {
 // Update ICE servers with TURN configuration
 getTurnConfig().then(servers => {
   iceServers = { iceServers: servers };
-  console.log('Updated ICE servers:', iceServers);
+  console.log('Updated ICE servers configuration:', iceServers);
 }).catch(error => {
   console.error("Failed to update ICE servers:", error);
+  console.log('Continuing with STUN-only configuration:', iceServers);
 });
 
 // Connection status handling
@@ -213,6 +232,7 @@ function removeParticipant(peerId) {
   }
   dtmfSenders.delete(peerId);
   activeCallParticipants.delete(peerId);
+  // Audio element ID
   const audioElement = document.getElementById(`audio-${peerId}`);
   if (audioElement) {
     audioElement.remove();
@@ -259,6 +279,7 @@ async function startCall(toUser) {
       offer: pc.localDescription,
     });
 
+    // Call related messages
     console.log(`Call initiated with ${toUser}`);
   } catch (error) {
     console.error("Error starting call:", error);
@@ -784,4 +805,18 @@ socket.on("user-left", (username) => {
   socket.emit("get-online-users");
 });
 
-// Initialize the app
+// Add error handler for socket events
+socket.on("error", (error) => {
+  console.error("Socket error:", error);
+  alert(error);
+});
+
+// Add this pattern to all socket event handlers
+socket.on("event-name", (data) => {
+  try {
+    // handler code
+  } catch (error) {
+    console.error("Error in event-name handler:", error);
+    alert("An error occurred. Please try again.");
+  }
+});
